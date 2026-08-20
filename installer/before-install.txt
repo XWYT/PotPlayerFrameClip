@@ -1,0 +1,7 @@
+PotPlayer FrameClip 会在 PotPlayer 右键菜单中加入“参照帧与片段截取”。
+
+安装过程不会强制关闭正在播放的 PotPlayer。若播放器当前正在运行，新菜单会在播放器退出后完成最终配置，下次启动即可使用。
+
+静帧与精确片段需要 FFmpeg 和 FFprobe。安装包不包含 FFmpeg；安装器会尝试自动识别，也可稍后在 FrameClip 设置中指定 ffmpeg.exe。
+
+当前安装包未进行商业代码签名。Windows SmartScreen 可能显示“未知发布者”，请确认文件来自本项目正式 GitHub Release 后再继续。

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Menu Title="PotPlayer FrameClip">
+	<SubMenu Name='参照帧与片段截取'>
+		<MenuItem CmdID='ID_PLAY_PAUSE' Name='截取当前帧（自动识别色彩 · 16-bit）' />
+		<MenuItem CmdID='' />
+		<MenuItem CmdID='ID_PLAY_PAUSE' Name='设置入点' />
+		<MenuItem CmdID='ID_PLAY_PAUSE' Name='设置出点' />
+		<MenuItem CmdID='ID_PLAY_PAUSE' Name='导出原码片段（保留源色彩/DV + 原音频）' />
+		<MenuItem CmdID='ID_PLAY_PAUSE' Name='导出精确片段（可选编码 + PCM）' />
+		<MenuItem CmdID='' />
+		<MenuItem CmdID='ID_PLAY_PAUSE' Name='清除入点和出点' />
+		<MenuItem CmdID='ID_PLAY_PAUSE' Name='设置…' />
+		<MenuItem CmdID='ID_PLAY_PAUSE' Name='打开当前作品图片文件夹' />
+		<MenuItem CmdID='ID_PLAY_PAUSE' Name='打开当前作品视频文件夹' />
+	</SubMenu>
+	<MenuItem CmdID='ID_BASE_OPEN' />
+	<MenuItem CmdID='CMD_POPUPMENU_OPEN'/>
+	<MenuItem CmdID='CMD_POPUPMENU_FAVORITE' />
+	<MenuItem CmdID='' />
+	<MenuItem CmdID='ID_PLAY_PAUSE' />
+	<MenuItem CmdID='ID_CLOSE_MEDIA' />
+	<MenuItem CmdID='' />
+	<MenuItem CmdID='CMD_POPUPMENU_PLAY' />
+	<MenuItem CmdID='CMD_POPUPMENU_CAPTION' />
+	<MenuItem CmdID='CMD_POPUPMENU_VIDEO' />
+	<MenuItem CmdID='CMD_POPUPMENU_AUDIO' />
+	<MenuItem CmdID='CMD_POPUPMENU_FILTER' />
+	<MenuItem CmdID='CMD_POPUPMENU_RATIO' />
+	<MenuItem CmdID='CMD_POPUPMENU_SIZE' />
+	<MenuItem CmdID='CMD_POPUPMENU_SKIN' />
+	<MenuItem CmdID='CMD_POPUPMENU_ETC' />
+	<MenuItem CmdID='' />
+	<MenuItem CmdID='ID_FULLSCREEN' />
+	<MenuItem CmdID='ID_FULL_FIT_SCREEN' />
+	<MenuItem CmdID='' />
+	<MenuItem CmdID='ID_PLAYLIST_WINDOW' />
+	<MenuItem CmdID='ID_CONTROL_BOX_WINDOW' />
+	<MenuItem CmdID='ID_PLAYINFO_WINDOW' />
+	<MenuItem CmdID='ID_OPTION_WINDOW' />
+	<MenuItem CmdID='ID_APP_ABOUT' />
+	<MenuItem CmdID='ID_APP_EXIT' />
+</Menu>

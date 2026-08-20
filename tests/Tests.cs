@@ -1,0 +1,122 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Runtime.Serialization;
+
+namespace PotPlayerFrameClip
+{
+    internal static class Tests
+    {
+        private static int failures;
+
+        private static void Check(bool condition, string message)
+        {
+            if (condition) return;
+            Console.Error.WriteLine(message);
+            failures++;
+        }
+
+        public static int Main()
+        {
+            Check(AppPaths.ConfigPath.StartsWith(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                StringComparison.OrdinalIgnoreCase), "Config must be stored under LocalAppData.");
+            Check(AppPaths.DefaultOutputDirectory.IndexOf("FrameClip", StringComparison.OrdinalIgnoreCase) >= 0,
+                "Default output directory is invalid.");
+            Check(CaptureFormats.NormalizeImageFormat("TIFF16") == "tiff16", "TIFF normalization failed.");
+            Check(CaptureFormats.NormalizeVideoPreset("prores4444xq") == "prores4444xq", "Video preset normalization failed.");
+            Check(MediaOrganizer.DeriveWorkTitle("For.All.Mankind.S05E04.2160p.ATVP.WEB-DL.mkv", "") == "For All Mankind",
+                "Series title normalization failed.");
+            Check(MediaOrganizer.DeriveClassificationTitle(@"D:\Media\For All Mankind\S01 4K.HDR\02.mkv", "", false) == "For All Mankind",
+                "Parent series title recovery failed.");
+            string unresolved = MediaOrganizer.DeriveClassificationTitle(@"D:\BaiduNetdiskDownload\S01 4K.HDR\02.mkv", "", false);
+            Check(unresolved.StartsWith("待归类剧集 [", StringComparison.Ordinal) && unresolved.EndsWith("]", StringComparison.Ordinal),
+                "Weak numeric episode title must remain explicitly unclassified.");
+            Check(MediaOrganizer.DeriveClassificationTitle(@"D:\BaiduNetdiskDownload\Reacher.S04E02.2026.2160p.mkv", "", false) == "Reacher",
+                "Descriptive episodic filename classification failed.");
+            Check(MediaOrganizer.DeriveClassificationTitle(@"D:\BaiduNetdiskDownload\2026.2160p.iT.mkv", "", false).StartsWith("待归类作品 [", StringComparison.Ordinal),
+                "Technical-only filename must not become a work title.");
+
+            Check(PotPlayerMediaLocator.ExtractPathFromIniValue(@"1833982=D:\Media\01.mkv") == @"D:\Media\01.mkv",
+                "RememberFiles playback-position parsing failed.");
+            Check(PotPlayerMediaLocator.ExtractPathFromIniValue(@"D:\Media\01.mkv") == @"D:\Media\01.mkv",
+                "Plain INI media path parsing failed.");
+
+            Type menuType = typeof(MenuBridgeContext);
+            object menuContext = FormatterServices.GetUninitializedObject(menuType);
+            MethodInfo rowMapper = menuType.GetMethod("TryMapSkinSubMenuRow", BindingFlags.Instance | BindingFlags.NonPublic);
+            MethodInfo titleMapper = menuType.GetMethod("TryMapSkinTitle", BindingFlags.Instance | BindingFlags.NonPublic);
+            Check(rowMapper != null && titleMapper != null, "Menu mapping methods are missing.");
+            CaptureAction[] expectedActions = new[]
+            {
+                CaptureAction.CaptureFrame, CaptureAction.MarkIn, CaptureAction.MarkOut,
+                CaptureAction.ExportOriginal, CaptureAction.ExportPrecise, CaptureAction.ClearRange,
+                CaptureAction.Settings, CaptureAction.OpenImageOutput, CaptureAction.OpenVideoOutput
+            };
+            int[] rowCenters = new[] { 12, 41, 65, 89, 113, 142, 166, 190, 214 };
+            string[] titles = new[]
+            {
+                "截取当前帧（自动识别色彩 · 16-bit）", "设置入点", "设置出点",
+                "导出原码片段（保留源色彩/DV + 原音频）", "导出精确片段（可选编码 + PCM）",
+                "清除入点和出点", "设置…", "打开当前作品图片文件夹", "打开当前作品视频文件夹"
+            };
+            for (int index = 0; index < expectedActions.Length; index++)
+            {
+                object[] rowArguments = new object[] { rowCenters[index], 226, CaptureAction.CaptureFrame };
+                bool rowMapped = rowMapper != null && (bool)rowMapper.Invoke(menuContext, rowArguments);
+                Check(rowMapped && (CaptureAction)rowArguments[2] == expectedActions[index], "Menu row mapping failed at index " + index + ".");
+
+                object[] titleArguments = new object[] { titles[index], CaptureAction.CaptureFrame };
+                bool titleMapped = titleMapper != null && (bool)titleMapper.Invoke(menuContext, titleArguments);
+                Check(titleMapped && (CaptureAction)titleArguments[1] == expectedActions[index], "Menu title mapping failed at index " + index + ".");
+            }
+
+            string temporary = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".exe");
+            string mediaDirectory = Path.Combine(Path.GetTempPath(), "FrameClipTests-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                File.WriteAllBytes(temporary, new byte[] { 0 });
+                Check(ToolLocator.Find(temporary, "ffmpeg.exe") == Path.GetFullPath(temporary), "Configured tool path was not retained.");
+
+                Directory.CreateDirectory(mediaDirectory);
+                string first = Path.Combine(mediaDirectory, "01.mkv");
+                string second = Path.Combine(mediaDirectory, "02.mkv");
+                File.WriteAllBytes(first, new byte[] { 0 });
+                File.WriteAllBytes(second, new byte[] { 0 });
+                IList<string> commandLinePaths = PotPlayerMediaLocator.ExtractExistingMediaArguments(
+                    "\"C:\\Apps\\PotPlayerMini64.exe\" \"" + first + "\"");
+                Check(commandLinePaths.Count == 1 && commandLinePaths[0] == Path.GetFullPath(first),
+                    "PotPlayer command-line media parsing failed.");
+                Check(PotPlayerMediaLocator.FindExactOrSibling("02.mkv", commandLinePaths) == Path.GetFullPath(second),
+                    "Trusted sibling media recovery failed.");
+
+                string portableIni = Path.Combine(mediaDirectory, "PotPlayerMini64.ini");
+                File.WriteAllLines(portableIni, new[] { "[Settings]", "LastMenuName=OldMenu.xml" }, System.Text.Encoding.Unicode);
+                Check(PendingMenuRepair.SetIniValue(portableIni, "Settings", "LastMenuName", "FrameClipMenu.xml"),
+                    "Pending menu repair could not update a portable INI.");
+                Check(Array.Exists(File.ReadAllLines(portableIni, System.Text.Encoding.Unicode),
+                    delegate(string line) { return line == "LastMenuName=FrameClipMenu.xml"; }),
+                    "Pending menu repair wrote an incorrect menu selection.");
+
+                string utf8Ini = Path.Combine(mediaDirectory, "PotPlayer.ini");
+                File.WriteAllText(utf8Ini, "[Settings]\r\nLastMenuName=旧菜单.xml\r\n", new System.Text.UTF8Encoding(false));
+                Check(PendingMenuRepair.SetIniValue(utf8Ini, "Settings", "LastMenuName", "FrameClipMenu.xml"),
+                    "Pending menu repair could not update a UTF-8 INI.");
+                byte[] utf8Bytes = File.ReadAllBytes(utf8Ini);
+                Check(!(utf8Bytes.Length >= 3 && utf8Bytes[0] == 0xEF && utf8Bytes[1] == 0xBB && utf8Bytes[2] == 0xBF),
+                    "Pending menu repair changed the UTF-8 BOM policy.");
+                Check(File.ReadAllText(utf8Ini, new System.Text.UTF8Encoding(false)).Contains("LastMenuName=FrameClipMenu.xml"),
+                    "Pending menu repair damaged a UTF-8 INI.");
+            }
+            finally
+            {
+                try { File.Delete(temporary); }
+                catch { }
+                try { Directory.Delete(mediaDirectory, true); }
+                catch { }
+            }
+            return failures == 0 ? 0 : 1;
+        }
+    }
+}

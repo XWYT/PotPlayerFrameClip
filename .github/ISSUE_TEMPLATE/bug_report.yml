@@ -1,0 +1,40 @@
+name: 问题报告
+description: 报告可以稳定复现的 FrameClip 故障
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: FrameClip 版本
+      description: 可在安装包文件名或程序属性中查看。
+    validations:
+      required: true
+  - type: input
+    id: potplayer
+    attributes:
+      label: PotPlayer 版本、位数与皮肤
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 版本与显示缩放
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: 片源特征
+      description: 请说明容器、编码、SDR/HDR/Dolby Vision 类型；不要公开私人文件路径。
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 日志位于 %LOCALAPPDATA%\PotPlayerFrameClip\logs。上传前请删除私人媒体路径。

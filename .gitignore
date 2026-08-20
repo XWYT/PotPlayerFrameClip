@@ -1,0 +1,8 @@
+dist/*
+!dist/.gitkeep
+*.user
+*.suo
+*.pdb
+*.log
+.vs/
+
