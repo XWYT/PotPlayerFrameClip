@@ -16,6 +16,7 @@
 - 支持 32 位、64 位 PotPlayer，以及便携版目录。
 - 可指定输出根目录、图片格式、精确片段编码和 FFmpeg 路径。
 - 设置窗口和 PotPlayer 扩展菜单可切换简体中文或英语。
+- PotPlayer 使用皮肤菜单时，FrameClip 功能在独立的深色操作菜单中执行；占位项不会绑定播放/暂停。
 - 保留安装前的 PotPlayer 自定义菜单；重复安装、升级和卸载均带恢复逻辑。
 
 ## 精度说明
@@ -119,7 +120,7 @@ $setup=Get-ChildItem -LiteralPath . -Filter 'PotPlayerFrameClip-v*-Setup.exe' | 
 便携版 PotPlayer 与自定义 FFmpeg：
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.1-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 可选参数：
@@ -171,19 +172,19 @@ $p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.0-Setup.exe' -ArgumentList
 
 ### 点击所有扩展按钮都变成播放或暂停
 
-这表示 PotPlayer 已载入菜单 XML，但菜单桥接程序没有运行，或仍在使用旧版本：
+这是 `0.2.x` 和 `0.3.0` 的旧菜单架构造成的。旧版把扩展项临时绑定到 PotPlayer 的播放/暂停命令，再依赖鼠标钩子覆盖；任何识别失败都会执行播放/暂停。`0.3.1` 已移除该绑定，必须升级安装并重新打开 PotPlayer：
 
 ```powershell
-Get-CimInstance Win32_Process -Filter "Name='PotPlayerFrameClip.exe'" | Select-Object ProcessId,ExecutablePath
+(Get-Item "$env:LOCALAPPDATA\PotPlayerFrameClip\PotPlayerFrameClip.exe").VersionInfo.FileVersion
 ```
 
-没有结果时启动程序：
+版本应为 `0.3.1.0` 或更高。随后确认实际菜单文件中没有旧占位命令。若 PotPlayer 不在 `D:\PotPlayer`，请替换为实际安装目录：
 
 ```powershell
-Start-Process "$env:LOCALAPPDATA\PotPlayerFrameClip\PotPlayerFrameClip.exe"
+Select-String -LiteralPath 'D:\PotPlayer\Menus\FrameClipMenu.xml' -Pattern 'ID_PLAY_PAUSE'
 ```
 
-若路径指向旧文件夹，重新运行最新版安装器。安装完成后重启一次 PotPlayer。
+请根据实际 PotPlayer 目录调整路径。FrameClip 子菜单中不应出现匹配结果；主菜单自身正常的播放项不受影响。
 
 ### 设置窗口无法打开，或菜单动作明显错位
 
@@ -193,7 +194,7 @@ Start-Process "$env:LOCALAPPDATA\PotPlayerFrameClip\PotPlayerFrameClip.exe"
 Stop-Process -Name PotPlayerFrameClip -Force -ErrorAction SilentlyContinue; Start-Process "$env:LOCALAPPDATA\PotPlayerFrameClip\PotPlayerFrameClip.exe"
 ```
 
-仍有问题时重新安装最新版。不同 PotPlayer 皮肤可能改变自绘菜单行为；提交问题时请附上 PotPlayer 版本、皮肤名与 `menu-debug.log`。
+仍有问题时重新安装最新版。皮肤模式下，点击 FrameClip 入口会切换到 FrameClip 自己的深色操作菜单，不再直接点击 PotPlayer 的九个占位行。提交问题时请附上 PotPlayer 版本、皮肤名与 `menu-debug.log`。
 
 ### 提示无法定位当前播放文件
 
@@ -229,7 +230,7 @@ HDR 原图保留源传递函数，没有执行显示色调映射。普通查看�
 当前安装包没有商业代码签名。请从项目 Releases 下载，核对版本化文件名；发布者提供 SHA-256 时可运行：
 
 ```powershell
-Get-FileHash '.\PotPlayerFrameClip-v0.3.0-Setup.exe' -Algorithm SHA256
+Get-FileHash '.\PotPlayerFrameClip-v0.3.1-Setup.exe' -Algorithm SHA256
 ```
 
 ## 卸载
@@ -251,13 +252,13 @@ Get-FileHash '.\PotPlayerFrameClip-v0.3.0-Setup.exe' -Algorithm SHA256
 ```powershell
 winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.1
 ```
 
 构建会执行 C# 单元测试、菜单静态检查，以及隔离的安装、重复安装、卸载恢复测试。最终发布资产为：
 
 ```text
-dist\PotPlayerFrameClip-v0.3.0-Setup.exe
+dist\PotPlayerFrameClip-v0.3.1-Setup.exe
 ```
 
 `dist\release` 与 `dist\obj` 仅供本机构建暂存，GitHub Release 工作流只上传单个安装包。源码按仓库原目录发布。

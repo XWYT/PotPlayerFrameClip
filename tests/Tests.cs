@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Windows.Forms;
 
 namespace PotPlayerFrameClip
 {
@@ -34,6 +35,15 @@ namespace PotPlayerFrameClip
             AppConfig defaults = new AppConfig();
             Check(!defaults.ExportRec709ForHdr, "HDR Rec.709 companion output must be disabled by default.");
             Check(defaults.Language == UiText.Chinese, "Simplified Chinese must remain the default language.");
+            using (FrameClipActionMenuForm actionMenu = new FrameClipActionMenuForm(UiText.English, delegate(CaptureAction action) { }))
+            {
+                Button[] actionButtons = actionMenu.Controls.OfType<Button>().ToArray();
+                Check(actionButtons.Length == 9, "Independent skin action menu must expose all nine commands.");
+                Check(actionButtons[0].Text.StartsWith("Capture current frame", StringComparison.Ordinal),
+                    "Independent skin action menu is not localized.");
+                Check(actionButtons.All(delegate(Button button) { return button.PreferredSize.Width <= button.Width; }),
+                    "Independent skin action menu clips an action label.");
+            }
 
             VideoInfo pqInfo = new VideoInfo
             {
@@ -66,16 +76,14 @@ namespace PotPlayerFrameClip
 
             Type menuType = typeof(MenuBridgeContext);
             object menuContext = FormatterServices.GetUninitializedObject(menuType);
-            MethodInfo rowMapper = menuType.GetMethod("TryMapSkinSubMenuRow", BindingFlags.Instance | BindingFlags.NonPublic);
             MethodInfo titleMapper = menuType.GetMethod("TryMapSkinTitle", BindingFlags.Instance | BindingFlags.NonPublic);
-            Check(rowMapper != null && titleMapper != null, "Menu mapping methods are missing.");
+            Check(titleMapper != null, "Skin-menu title mapping method is missing.");
             CaptureAction[] expectedActions = new[]
             {
                 CaptureAction.CaptureFrame, CaptureAction.MarkIn, CaptureAction.MarkOut,
                 CaptureAction.ExportOriginal, CaptureAction.ExportPrecise, CaptureAction.ClearRange,
                 CaptureAction.Settings, CaptureAction.OpenImageOutput, CaptureAction.OpenVideoOutput
             };
-            int[] rowCenters = new[] { 12, 41, 65, 89, 113, 142, 166, 190, 214 };
             string[] titles = new[]
             {
                 "截取当前帧（自动识别色彩 · 16-bit）", "设置入点", "设置出点",
@@ -90,10 +98,6 @@ namespace PotPlayerFrameClip
             };
             for (int index = 0; index < expectedActions.Length; index++)
             {
-                object[] rowArguments = new object[] { rowCenters[index], 226, CaptureAction.CaptureFrame };
-                bool rowMapped = rowMapper != null && (bool)rowMapper.Invoke(menuContext, rowArguments);
-                Check(rowMapped && (CaptureAction)rowArguments[2] == expectedActions[index], "Menu row mapping failed at index " + index + ".");
-
                 object[] titleArguments = new object[] { titles[index], CaptureAction.CaptureFrame };
                 bool titleMapped = titleMapper != null && (bool)titleMapper.Invoke(menuContext, titleArguments);
                 Check(titleMapped && (CaptureAction)titleArguments[1] == expectedActions[index], "Menu title mapping failed at index " + index + ".");
@@ -143,12 +147,12 @@ namespace PotPlayerFrameClip
                 string menuPath = Path.Combine(mediaDirectory, "FrameClipMenu.xml");
                 File.WriteAllText(menuPath,
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?><Menu><SubMenu Name=\"参照帧与片段截取\">" +
-                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"截取当前帧（自动识别色彩 · 16-bit）\"/><MenuItem CmdID=\"\"/>" +
-                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"设置入点\"/><MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"设置出点\"/>" +
-                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"导出原码片段（保留源色彩/DV + 原音频）\"/>" +
-                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"导出精确片段（可选编码 + PCM）\"/><MenuItem CmdID=\"\"/>" +
-                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"清除入点和出点\"/><MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"设置…\"/>" +
-                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"打开当前作品图片文件夹\"/><MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"打开当前作品视频文件夹\"/>" +
+                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"截取当前帧（自动识别色彩 · 16-bit）\"/><MenuItem CmdID=\"\"/>" +
+                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"设置入点\"/><MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"设置出点\"/>" +
+                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"导出原码片段（保留源色彩/DV + 原音频）\"/>" +
+                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"导出精确片段（可选编码 + PCM）\"/><MenuItem CmdID=\"\"/>" +
+                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"清除入点和出点\"/><MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"设置…\"/>" +
+                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"打开当前作品图片文件夹\"/><MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"打开当前作品视频文件夹\"/>" +
                     "</SubMenu><SubMenu Name=\"User menu\"><MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"About\"/></SubMenu></Menu>",
                     new System.Text.UTF8Encoding(false));
                 Check(MenuLocalization.ApplyToFile(menuPath, UiText.English), "English menu localization failed.");
@@ -158,6 +162,8 @@ namespace PotPlayerFrameClip
                     "English submenu title was not written.");
                 Check(localizedMenu.SelectSingleNode("/Menu/SubMenu[1]/MenuItem[@CmdID != ''][1]").Attributes["Name"].Value.StartsWith("Capture current frame", StringComparison.Ordinal),
                     "English capture command was not written.");
+                Check(localizedMenu.SelectNodes("/Menu/SubMenu[1]/MenuItem[@CmdID='CMD_POPUPMENU_ETC']").Count == 9,
+                    "Menu localization changed the safe placeholder commands.");
                 Check(localizedMenu.SelectSingleNode("/Menu/SubMenu[2]").Attributes["Name"].Value == "User menu",
                     "Menu localization modified an unrelated user menu.");
                 byte[] localizedBytes = File.ReadAllBytes(menuPath);

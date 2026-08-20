@@ -19,8 +19,8 @@ using System.Xml;
 [assembly: AssemblyDescription("Frame and source clip capture extension for PotPlayer")]
 [assembly: AssemblyProduct("PotPlayer FrameClip")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 PotPlayer FrameClip contributors")]
-[assembly: AssemblyVersion("0.3.0.0")]
-[assembly: AssemblyFileVersion("0.3.0.0")]
+[assembly: AssemblyVersion("0.3.1.0")]
+[assembly: AssemblyFileVersion("0.3.1.0")]
 
 namespace PotPlayerFrameClip
 {
@@ -2906,11 +2906,126 @@ namespace PotPlayerFrameClip
         }
     }
 
+    internal sealed class FrameClipActionMenuForm : Form
+    {
+        private readonly List<Button> actionButtons = new List<Button>();
+        private readonly Action<CaptureAction> dispatch;
+
+        internal FrameClipActionMenuForm(string language, Action<CaptureAction> dispatch)
+        {
+            this.dispatch = dispatch;
+            Text = UiText.MenuTitle(language);
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            TopMost = true;
+            StartPosition = FormStartPosition.Manual;
+            AutoScaleMode = AutoScaleMode.Dpi;
+            BackColor = Color.FromArgb(38, 39, 42);
+            ForeColor = Color.FromArgb(238, 238, 238);
+            Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular);
+            Padding = new Padding(1);
+
+            CaptureAction[] actions = new[]
+            {
+                CaptureAction.CaptureFrame,
+                CaptureAction.MarkIn,
+                CaptureAction.MarkOut,
+                CaptureAction.ExportOriginal,
+                CaptureAction.ExportPrecise,
+                CaptureAction.ClearRange,
+                CaptureAction.Settings,
+                CaptureAction.OpenImageOutput,
+                CaptureAction.OpenVideoOutput
+            };
+
+            int top = 1;
+            for (int index = 0; index < actions.Length; index++)
+            {
+                if (index == 1 || index == 5)
+                {
+                    Panel separator = new Panel();
+                    separator.BackColor = Color.FromArgb(78, 80, 84);
+                    separator.SetBounds(8, top + 4, 404, 1);
+                    Controls.Add(separator);
+                    top += 9;
+                }
+
+                CaptureAction action = actions[index];
+                Button button = new Button();
+                button.Text = UiText.ActionLabel(language, action);
+                button.Tag = action;
+                button.TextAlign = ContentAlignment.MiddleLeft;
+                button.FlatStyle = FlatStyle.Flat;
+                button.FlatAppearance.BorderSize = 0;
+                button.FlatAppearance.MouseOverBackColor = Color.FromArgb(58, 60, 64);
+                button.FlatAppearance.MouseDownBackColor = Color.FromArgb(72, 74, 78);
+                button.BackColor = BackColor;
+                button.ForeColor = ForeColor;
+                button.TabStop = true;
+                button.SetBounds(1, top, 418, 31);
+                button.Click += ActionButtonClick;
+                button.KeyDown += ActionButtonKeyDown;
+                Controls.Add(button);
+                actionButtons.Add(button);
+                top += 31;
+            }
+
+            ClientSize = new Size(420, top + 1);
+            Deactivate += delegate { Close(); };
+            Shown += delegate
+            {
+                if (actionButtons.Count > 0) actionButtons[0].Focus();
+            };
+            Paint += delegate(object sender, PaintEventArgs eventArgs)
+            {
+                using (Pen border = new Pen(Color.FromArgb(92, 94, 98)))
+                    eventArgs.Graphics.DrawRectangle(border, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
+            };
+        }
+
+        internal void ShowAt(Point desiredLocation)
+        {
+            Rectangle workingArea = Screen.FromPoint(desiredLocation).WorkingArea;
+            int left = Math.Max(workingArea.Left, Math.Min(desiredLocation.X, workingArea.Right - Width));
+            int top = Math.Max(workingArea.Top, Math.Min(desiredLocation.Y, workingArea.Bottom - Height));
+            Location = new Point(left, top);
+            Show();
+            Activate();
+        }
+
+        private void ActionButtonClick(object sender, EventArgs eventArgs)
+        {
+            Button button = sender as Button;
+            if (button == null || !(button.Tag is CaptureAction)) return;
+            CaptureAction action = (CaptureAction)button.Tag;
+            Close();
+            dispatch(action);
+        }
+
+        private void ActionButtonKeyDown(object sender, KeyEventArgs eventArgs)
+        {
+            if (eventArgs.KeyCode == Keys.Escape)
+            {
+                Close();
+                eventArgs.Handled = true;
+                return;
+            }
+            if (eventArgs.KeyCode != Keys.Up && eventArgs.KeyCode != Keys.Down) return;
+            int current = actionButtons.IndexOf(sender as Button);
+            if (current < 0) return;
+            int next = eventArgs.KeyCode == Keys.Down
+                ? (current + 1) % actionButtons.Count
+                : (current - 1 + actionButtons.Count) % actionButtons.Count;
+            actionButtons[next].Focus();
+            eventArgs.Handled = true;
+        }
+    }
+
     internal sealed class MenuBridgeContext : ApplicationContext
     {
-        // PotPlayer 的 XML 菜单只接受自身命令，未提供第三方回调接口。常驻程序通过
-        // WinEvent 获取菜单窗口信息，再由低级鼠标钩子在命令送达播放器前分发扩展动作。
-        // 所有识别都同时约束到 PotPlayer 进程、可见菜单窗口和一次右键菜单会话。
+        // PotPlayer 的 XML 菜单不提供第三方命令回调。原生 HMENU 可以使用独立命令 ID；
+        // 皮肤菜单则只作为入口，实际操作菜单由 FrameClip 自己显示和分发。这样不再依赖
+        // 九个自绘行的坐标，也不会在桥接失败时把点击退化成播放/暂停。
         private const uint RootCommandId = 0xEE00;
         private const uint CaptureCommandId = 0xEE01;
         private const uint MarkInCommandId = 0xEE02;
@@ -2929,8 +3044,6 @@ namespace PotPlayerFrameClip
         private readonly CaptureEngine engine;
         private readonly System.Windows.Forms.Timer installRepairTimer;
         private readonly Dictionary<uint, NativeMethods.RECT> actionRects = new Dictionary<uint, NativeMethods.RECT>();
-        private readonly Dictionary<CaptureAction, IntPtr> skinActionWindows = new Dictionary<CaptureAction, IntPtr>();
-        private readonly object menuRectLock = new object();
         private IntPtr mouseHook;
         private IntPtr popupEventHook;
         private IntPtr menuEventHook;
@@ -2948,6 +3061,8 @@ namespace PotPlayerFrameClip
         private DateTime menuSessionUntil = DateTime.MinValue;
         private DateTime skinSubMenuUntil = DateTime.MinValue;
         private bool suppressNextLeftUp;
+        private int skinActionMenuQueued;
+        private FrameClipActionMenuForm skinActionMenu;
 
         internal MenuBridgeContext(AppConfig config)
         {
@@ -3006,33 +3121,30 @@ namespace PotPlayerFrameClip
                         TraceMenu("cancel external-left " + data.Point.X + "," + data.Point.Y);
                         ResetMenuTracking();
                     }
-                    // 皮肤菜单的窗口标题和实际矩形比预估坐标可靠。只有 PotPlayer 没有
-                    // 暴露这些窗口信息时才使用 DPI 几何后备，避免点击落回 XML 中的
-                    // 占位命令 ID_PLAY_PAUSE。
-                    else if (TryHandleCachedSkinMenuClick(data.Point) || TryHandleSkinMenuClick(data.Point) ||
-                        TryHandleSkinSubMenuGeometry(data.Point) || TryHandleNativeMenuClick(data.Point))
+                    // 原生菜单按 HMENU 的真实命令矩形分发。皮肤菜单不再猜测九个动作行，
+                    // 它只负责打开 FrameClip 自己拥有的动作菜单。
+                    else if (TryHandleNativeMenuClick(data.Point))
                     {
                         suppressNextLeftUp = true;
                         return new IntPtr(1);
                     }
-                    else if (IsArmedSkinSubMenuPoint(data.Point))
+                    else if (TryOpenSkinActionMenuFromSubMenu(data.Point))
                     {
-                        IntPtr menuWindow = NativeMethods.WindowFromPoint(data.Point);
-                        TraceMenu("suppress unmapped submenu click " + data.Point.X + "," + data.Point.Y);
-                        if (menuWindow != IntPtr.Zero)
-                            NativeMethods.PostMessage(menuWindow, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
-                        ResetMenuTracking();
                         suppressNextLeftUp = true;
                         return new IntPtr(1);
                     }
-                    else if (TryArmSkinFrameClipSubMenu(data.Point))
+                    else if (TryOpenSkinActionMenuFromRoot(data.Point))
                     {
-                        TouchMenuSession();
+                        suppressNextLeftUp = true;
+                        return new IntPtr(1);
                     }
                     else
                     {
-                        TraceMenu("cancel player-left " + data.Point.X + "," + data.Point.Y);
-                        ResetMenuTracking();
+                        // 皮肤菜单可能不为每一行创建独立窗口。保留本次短会话，等待
+                        // EVENT_OBJECT_SHOW 识别 FrameClip 的第一项；普通 PotPlayer 命令
+                        // 会在菜单关闭事件中自然清理状态。
+                        TraceMenu("defer unmatched player-left " + data.Point.X + "," + data.Point.Y);
+                        TouchMenuSession();
                     }
                 }
                 else if ((message == NativeMethods.WM_RBUTTONDOWN || message == NativeMethods.WM_MBUTTONDOWN) && IsMenuSessionActive())
@@ -3067,7 +3179,6 @@ namespace PotPlayerFrameClip
             }
             if (eventType == NativeMethods.EVENT_OBJECT_HIDE)
             {
-                ForgetSkinActionWindow(hwnd);
                 ForgetSkinMenuContainer(hwnd);
                 return;
             }
@@ -3215,20 +3326,10 @@ namespace PotPlayerFrameClip
 
             NativeMethods.RECT rect;
             if (!NativeMethods.GetWindowRect(hwnd, out rect)) return false;
-            lock (menuRectLock) skinActionWindows[action] = hwnd;
             activeMenuWindow = hwnd;
+            if (action == CaptureAction.CaptureFrame)
+                QueueSkinActionMenu(new Point(rect.Left, rect.Top), hwnd, "action-window");
             return true;
-        }
-
-        private void ForgetSkinActionWindow(IntPtr hwnd)
-        {
-            lock (menuRectLock)
-            {
-                CaptureAction? remove = null;
-                foreach (KeyValuePair<CaptureAction, IntPtr> item in skinActionWindows)
-                    if (item.Value == hwnd) { remove = item.Key; break; }
-                if (remove.HasValue) skinActionWindows.Remove(remove.Value);
-            }
         }
 
         private bool CacheSkinMenuContainer(IntPtr hwnd)
@@ -3244,10 +3345,13 @@ namespace PotPlayerFrameClip
             if (height >= 300)
             {
                 skinRootMenuWindow = hwnd;
+                skinRootClickRect = rect;
+                hasSkinClickGeometry = true;
+                TraceMenu("root-window " + rect.Left + "," + rect.Top + "," + rect.Right + "," + rect.Bottom);
                 return true;
             }
 
-            if (skinRootMenuWindow == IntPtr.Zero || DateTime.UtcNow > skinSubMenuUntil || height < 160 || height > 420) return false;
+            if (skinRootMenuWindow == IntPtr.Zero || height < 160 || height > 420) return false;
             NativeMethods.RECT rootRect;
             if (!NativeMethods.GetWindowRect(skinRootMenuWindow, out rootRect)) return false;
             bool opensRight = Math.Abs(rect.Left - rootRect.Right) <= 20;
@@ -3256,6 +3360,7 @@ namespace PotPlayerFrameClip
             if ((!opensRight && !opensLeft) || !verticallyRelated) return false;
 
             skinSubMenuWindow = hwnd;
+            skinSubMenuUntil = DateTime.UtcNow.AddSeconds(5);
             return true;
         }
 
@@ -3340,7 +3445,6 @@ namespace PotPlayerFrameClip
             skinSubMenuWindow = IntPtr.Zero;
             skinSubMenuUntil = DateTime.MinValue;
             hasSkinClickGeometry = false;
-            lock (menuRectLock) skinActionWindows.Clear();
         }
 
         private void ResetNativeMenuTracking()
@@ -3352,47 +3456,114 @@ namespace PotPlayerFrameClip
             actionRects.Clear();
         }
 
-        private bool TryArmSkinFrameClipSubMenu(NativeMethods.POINT point)
+        private bool TryOpenSkinActionMenuFromRoot(NativeMethods.POINT point)
         {
-            if (!IsActivePotPlayerInteraction(point) || !hasSkinClickGeometry || !skinRootClickRect.Contains(point))
+            if (!IsActivePotPlayerInteraction(point)) return false;
+
+            IntPtr pointWindow = NativeMethods.WindowFromPoint(point);
+            string pointTitle;
+            NativeMethods.RECT titledRect;
+            if (TryGetFrameClipSkinMenuTitle(pointWindow, out pointTitle) &&
+                (pointTitle == UiText.MenuTitle(UiText.Chinese) || pointTitle == UiText.MenuTitle(UiText.English)) &&
+                NativeMethods.GetWindowRect(pointWindow, out titledRect))
+            {
+                QueueSkinActionMenu(GetSkinActionMenuLocation(titledRect, point), pointWindow, "root-title");
+                TraceMenu("open action-menu from root title");
+                return true;
+            }
+
+            NativeMethods.RECT rootRect = skinRootClickRect;
+            if (skinRootMenuWindow != IntPtr.Zero && NativeMethods.IsWindowVisible(skinRootMenuWindow))
+                NativeMethods.GetWindowRect(skinRootMenuWindow, out rootRect);
+            if (!hasSkinClickGeometry || !rootRect.Contains(point))
             {
                 TraceMenu("arm-miss " + point.X + "," + point.Y + " geometry=" + hasSkinClickGeometry);
                 return false;
             }
-            int relativeY = point.Y - skinRootClickRect.Top;
+            int relativeY = point.Y - rootRect.Top;
 
-            // FrameClip 入口固定在 FrameClipMenu.xml 第一行。这里只允许很窄的首行区域
-            // 激活子菜单映射，防止其他 PotPlayer 子菜单的第一项误触发扩展命令。
+            // FrameClip 入口固定在 XML 菜单第一行。实际菜单窗口矩形优先于右键点估算，
+            // 只接受首行区域，避免覆盖其他 PotPlayer 子菜单。
             double scale = GetPotPlayerMenuScale(point);
-            if (relativeY < 0 || relativeY > (int)Math.Ceiling(34 * scale))
+            if (relativeY < 0 || relativeY > (int)Math.Ceiling(38 * scale))
             {
                 TraceMenu("arm-row-miss y=" + relativeY);
                 return false;
             }
 
-            skinSubMenuUntil = DateTime.UtcNow.AddSeconds(5);
-            TraceMenu("armed");
+            QueueSkinActionMenu(GetSkinActionMenuLocation(rootRect, point), pointWindow, "root-row");
+            TraceMenu("open action-menu from root");
             return true;
         }
 
-        private bool TryHandleSkinSubMenuGeometry(NativeMethods.POINT point)
+        private static Point GetSkinActionMenuLocation(NativeMethods.RECT rootRect, NativeMethods.POINT point)
         {
-            if (!IsActivePotPlayerInteraction(point) || !hasSkinClickGeometry || DateTime.UtcNow > skinSubMenuUntil ||
-                !skinSubMenuClickRect.Contains(point)) return false;
+            int desiredX = rootRect.Right;
+            Rectangle workingArea = Screen.FromPoint(new Point(point.X, point.Y)).WorkingArea;
+            if (desiredX + 420 > workingArea.Right) desiredX = rootRect.Left - 420;
+            return new Point(desiredX, rootRect.Top);
+        }
 
-            CaptureAction action;
-            int menuHeight = skinSubMenuClickRect.Bottom - skinSubMenuClickRect.Top;
-            if (!TryMapSkinSubMenuRow(point.Y - skinSubMenuClickRect.Top, menuHeight, out action)) return false;
+        private bool TryOpenSkinActionMenuFromSubMenu(NativeMethods.POINT point)
+        {
+            if (!IsActivePotPlayerInteraction(point) || DateTime.UtcNow > skinSubMenuUntil) return false;
+
+            NativeMethods.RECT subMenuRect = skinSubMenuClickRect;
             IntPtr menuWindow = NativeMethods.WindowFromPoint(point);
-            TraceMenu("dispatch " + action + " at " + point.X + "," + point.Y);
-            DispatchAction(action, menuWindow);
+            if (skinSubMenuWindow != IntPtr.Zero && NativeMethods.IsWindowVisible(skinSubMenuWindow))
+            {
+                NativeMethods.RECT actualRect;
+                if (NativeMethods.GetWindowRect(skinSubMenuWindow, out actualRect)) subMenuRect = actualRect;
+                menuWindow = skinSubMenuWindow;
+            }
+            if (!hasSkinClickGeometry || !subMenuRect.Contains(point)) return false;
+
+            NativeMethods.RECT rootRect = skinRootClickRect;
+            if (skinRootMenuWindow != IntPtr.Zero && NativeMethods.IsWindowVisible(skinRootMenuWindow))
+            {
+                NativeMethods.RECT actualRootRect;
+                if (NativeMethods.GetWindowRect(skinRootMenuWindow, out actualRootRect)) rootRect = actualRootRect;
+            }
+            QueueSkinActionMenu(GetSkinActionMenuLocation(rootRect, point), menuWindow, "submenu-fallback");
+            TraceMenu("open action-menu from submenu fallback");
             return true;
         }
 
-        private bool IsArmedSkinSubMenuPoint(NativeMethods.POINT point)
+        private void QueueSkinActionMenu(Point location, IntPtr potPlayerMenuWindow, string reason)
         {
-            return IsActivePotPlayerInteraction(point) && hasSkinClickGeometry &&
-                DateTime.UtcNow <= skinSubMenuUntil && skinSubMenuClickRect.Contains(point);
+            if ((skinActionMenu != null && !skinActionMenu.IsDisposed) ||
+                Interlocked.CompareExchange(ref skinActionMenuQueued, 1, 0) != 0) return;
+            TraceMenu("queue action-menu " + reason + " at " + location.X + "," + location.Y);
+            dispatcher.BeginInvoke(new Action(delegate
+            {
+                try
+                {
+                    if (potPlayerMenuWindow != IntPtr.Zero)
+                        NativeMethods.SendMessage(potPlayerMenuWindow, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
+                    if (skinRootMenuWindow != IntPtr.Zero)
+                        NativeMethods.SendMessage(skinRootMenuWindow, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
+                    if (skinSubMenuWindow != IntPtr.Zero)
+                        NativeMethods.SendMessage(skinSubMenuWindow, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
+
+                    ResetMenuTracking();
+                    skinActionMenu = new FrameClipActionMenuForm(config.Language, delegate(CaptureAction action)
+                    {
+                        TraceMenu("dispatch action-menu " + action);
+                        engine.Execute(action);
+                    });
+                    skinActionMenu.FormClosed += delegate
+                    {
+                        skinActionMenu = null;
+                        Interlocked.Exchange(ref skinActionMenuQueued, 0);
+                    };
+                    skinActionMenu.ShowAt(location);
+                }
+                catch (Exception exception)
+                {
+                    Interlocked.Exchange(ref skinActionMenuQueued, 0);
+                    TraceMenu("action-menu failed " + exception.Message);
+                }
+            }));
         }
 
         private void TraceMenu(string message)
@@ -3405,37 +3576,6 @@ namespace PotPlayerFrameClip
                 File.AppendAllText(path, DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine);
             }
             catch { }
-        }
-
-        private bool TryMapSkinSubMenuRow(int relativeY, int menuHeight, out CaptureAction action)
-        {
-            action = CaptureAction.CaptureFrame;
-            if (relativeY < 0 || relativeY >= menuHeight) return false;
-
-            // 皮肤菜单由九个命令行和两个分隔条组成。坐标按实际窗口高度缩放，兼容 DPI
-            // 缩放，同时不在不同菜单会话之间复用旧屏幕坐标。
-            double scale = menuHeight / 226.0;
-            double[] centers = new double[] { 12, 41, 65, 89, 113, 142, 166, 190, 214 };
-            CaptureAction[] actions = new CaptureAction[]
-            {
-                CaptureAction.CaptureFrame,
-                CaptureAction.MarkIn,
-                CaptureAction.MarkOut,
-                CaptureAction.ExportOriginal,
-                CaptureAction.ExportPrecise,
-                CaptureAction.ClearRange,
-                CaptureAction.Settings,
-                CaptureAction.OpenImageOutput,
-                CaptureAction.OpenVideoOutput
-            };
-
-            for (int index = 0; index < centers.Length; index++)
-            {
-                if (Math.Abs(relativeY - centers[index] * scale) > 11.5 * scale) continue;
-                action = actions[index];
-                return true;
-            }
-            return false;
         }
 
         private bool TryHandleNativeMenuClick(NativeMethods.POINT point)
@@ -3466,53 +3606,6 @@ namespace PotPlayerFrameClip
             else if (command == OpenImageCommandId) action = CaptureAction.OpenImageOutput;
             else if (command == OpenVideoCommandId) action = CaptureAction.OpenVideoOutput;
             else return false;
-            return true;
-        }
-
-        private bool TryHandleSkinMenuClick(NativeMethods.POINT point)
-        {
-            IntPtr menuWindow = NativeMethods.WindowFromPoint(point);
-            if (menuWindow == IntPtr.Zero || !IsPotPlayerWindow(menuWindow)) return false;
-            string menuTitle;
-            if (!TryGetFrameClipSkinMenuTitle(menuWindow, out menuTitle)) return false;
-
-            CaptureAction action;
-            if (!TryMapSkinTitle(menuTitle, out action)) return false;
-            DispatchAction(action, menuWindow);
-            return true;
-        }
-
-        private bool TryHandleCachedSkinMenuClick(NativeMethods.POINT point)
-        {
-            IntPtr pointWindow = NativeMethods.WindowFromPoint(point);
-            if (pointWindow == IntPtr.Zero || !IsPotPlayerWindow(pointWindow)) return false;
-
-            CaptureAction action = CaptureAction.CaptureFrame;
-            IntPtr actionWindow = IntPtr.Zero;
-            bool found = false;
-            lock (menuRectLock)
-            {
-                List<CaptureAction> stale = new List<CaptureAction>();
-                foreach (KeyValuePair<CaptureAction, IntPtr> item in skinActionWindows)
-                {
-                    NativeMethods.RECT rect;
-                    if (!NativeMethods.IsWindowVisible(item.Value) || !IsPotPlayerWindow(item.Value) || !NativeMethods.GetWindowRect(item.Value, out rect))
-                    {
-                        stale.Add(item.Key);
-                        continue;
-                    }
-                    // 皮肤菜单采用自绘，WindowFromPoint 可能返回共享父窗口。点击点和缓存项
-                    // 仍分别受“可见且属于 PotPlayer”约束，因此可以安全使用缓存矩形匹配。
-                    if (!rect.Contains(point)) continue;
-                    action = item.Key;
-                    actionWindow = item.Value;
-                    found = true;
-                    break;
-                }
-                foreach (CaptureAction staleAction in stale) skinActionWindows.Remove(staleAction);
-            }
-            if (!found) return false;
-            DispatchAction(action, actionWindow);
             return true;
         }
 
@@ -3595,6 +3688,7 @@ namespace PotPlayerFrameClip
             if (foregroundEventHook != IntPtr.Zero) NativeMethods.UnhookWinEvent(foregroundEventHook);
             if (disposing)
             {
+                if (skinActionMenu != null && !skinActionMenu.IsDisposed) skinActionMenu.Close();
                 installRepairTimer.Stop();
                 installRepairTimer.Dispose();
                 dispatcher.Dispose();

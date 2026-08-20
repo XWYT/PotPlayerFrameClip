@@ -64,6 +64,9 @@ try {
     $frameClipTitle = '参照帧与片段截取'
     Assert-True (@($merged.Menu.SubMenu | Where-Object { $_.Name -eq $frameClipTitle }).Count -eq 1) '扩展菜单数量不正确。'
     Assert-True (@($merged.Menu.SubMenu | Where-Object { $_.Name -eq '用户菜单' }).Count -eq 1) '用户原有菜单没有保留。'
+    $installedCommands = @($merged.Menu.SubMenu | Where-Object { $_.Name -eq $frameClipTitle } | ForEach-Object { $_.MenuItem | Where-Object { $_.CmdID } })
+    Assert-True (@($installedCommands | Where-Object { $_.CmdID -eq 'ID_PLAY_PAUSE' }).Count -eq 0) 'FrameClip 菜单仍会退化成播放/暂停。'
+    Assert-True (@($installedCommands | Where-Object { $_.CmdID -ne 'CMD_POPUPMENU_ETC' }).Count -eq 0) 'FrameClip 菜单没有使用失效关闭占位命令。'
     $installedIni = [IO.File]::ReadAllText($iniPath, [Text.UTF8Encoding]::new($false))
     Assert-True ($installedIni.Contains('LastMenuName=FrameClipMenu.xml')) '安装后没有选择扩展菜单。'
     Assert-True ($installedIni.Contains('Language=简体中文')) '安装过程损坏了 UTF-8 INI 内容。'

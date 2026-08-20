@@ -11,6 +11,7 @@ PotPlayer FrameClip adds a **Reference Frame & Clip Capture** submenu to PotPlay
 - Automatic per-title `Images` and `Videos` organization with release-name matching.
 - SDR, HDR10/PQ, and HLG source labeling, with opt-in HDR-to-SDR tone mapping.
 - Simplified Chinese and English settings and PotPlayer extension menus.
+- Fail-closed skin-menu integration: FrameClip actions run in an independent dark action menu and never fall back to play/pause.
 - 32-bit and 64-bit PotPlayer support, including portable installations.
 - Single-file per-user installer; FFmpeg remains an external dependency.
 
@@ -48,7 +49,7 @@ Download `PotPlayerFrameClip-v<version>-Setup.exe` from GitHub Releases and run 
 Silent installation:
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.1-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 ## Color handling
@@ -59,13 +60,15 @@ When **Create a tone-mapped Rec.709 SDR copy for HDR captures** is enabled, PQ a
 
 The language selector updates the FrameClip settings and extension menus. Restart PotPlayer after saving so its loaded XML menu refreshes. Windows may request administrator confirmation when the PotPlayer menu is installed in a protected directory.
 
+Starting with 0.3.1, skinned PotPlayer menus act only as the FrameClip entry point. The nine actions are displayed and dispatched by FrameClip itself. XML placeholders use a non-playback popup command, so a stopped helper or an unrecognized skin cannot toggle playback.
+
 Dolby Vision sources without a reliable HDR10/HLG-compatible base layer are rejected for decoded reference output. Transcoded ProRes/DNxHR output does not retain Dolby Vision dynamic metadata. Use source-copy export when the original streams must be preserved.
 
 ## Build
 
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.1
 ```
 
 The release workflow uploads one asset: `PotPlayerFrameClip-v<version>-Setup.exe`.

@@ -20,7 +20,10 @@ Assert-True (-not $sourceText.Contains($forbiddenBrand)) 'A legacy product-speci
 Assert-True (-not ($sourceText -match '[A-Za-z]:\\')) 'A fixed Windows drive path remains in source.'
 Assert-True ($sourceText.Contains('PotPlayerMini64') -and $sourceText.Contains('PotPlayerMini')) 'Both PotPlayer bitness variants must be detected.'
 Assert-True ($sourceText.Contains('Environment.SpecialFolder.LocalApplicationData')) 'Writable per-user state path is missing.'
-Assert-True ($sourceText.Contains('TryHandleCachedSkinMenuClick(data.Point)') -and $sourceText.Contains('TryHandleSkinMenuClick(data.Point)')) 'Reliable skin-menu handlers are not connected to the mouse callback.'
+Assert-True ($sourceText.Contains('TryOpenSkinActionMenuFromRoot(data.Point)') -and $sourceText.Contains('TryOpenSkinActionMenuFromSubMenu(data.Point)')) `
+    'The independent skin-menu entry paths are not connected to the mouse callback.'
+Assert-True (-not $sourceText.Contains('TryMapSkinSubMenuRow') -and -not $sourceText.Contains('TryHandleCachedSkinMenuClick')) `
+    'Legacy per-row skin coordinate dispatch is still present.'
 Assert-True ($sourceText.Contains('[RememberFiles]') -and $sourceText.Contains('ExtractPathFromIniValue')) 'PotPlayer media-history parsing is incomplete.'
 Assert-True ($sourceText.Contains('FindExistingWorkDirectory(root, derivedTitle, episodicSource)')) 'Derived and unclassified titles are not reused across captures.'
 Assert-True ($sourceText.Contains('ToastForm previousToast = activeToast;') -and $sourceText.Contains('previousToast.Dispose();')) 'Toast replacement still risks clearing the active field during FormClosed.'
@@ -39,8 +42,16 @@ Assert-True ($installText.Contains("Contains('ExportRec709ForHdr')") -and $insta
 $submenu = $menu.Menu.SubMenu | Select-Object -First 1
 Assert-True ($submenu.Name -eq ([char]0x53C2 + [char]0x7167 + [char]0x5E27 + [char]0x4E0E + [char]0x7247 + [char]0x6BB5 + [char]0x622A + [char]0x53D6)) 'Unexpected menu title.'
 $commandRows = @($submenu.MenuItem | Where-Object { $_.CmdID })
-Assert-True ($commandRows.Count -eq 9) 'The click map requires exactly nine command rows.'
+Assert-True ($commandRows.Count -eq 9) 'The localized skin entry must expose exactly nine command labels.'
 Assert-True ($commandRows[0].Name.StartsWith([char]0x622A + [char]0x53D6 + [char]0x5F53 + [char]0x524D + [char]0x5E27)) 'Frame capture must remain the first submenu command.'
+Assert-True (@($commandRows | Where-Object { $_.CmdID -eq 'ID_PLAY_PAUSE' }).Count -eq 0) `
+    'FrameClip actions must never fall back to PotPlayer play/pause.'
+Assert-True (@($commandRows | Where-Object { $_.CmdID -ne 'CMD_POPUPMENU_ETC' }).Count -eq 0) `
+    'Skin-menu placeholders must use the fail-closed non-playback command.'
+Assert-True ($sourceText.Contains('FrameClipActionMenuForm') -and $sourceText.Contains('QueueSkinActionMenu')) `
+    'The independent skin action menu is not connected.'
+Assert-True ($sourceText.Contains('Interlocked.CompareExchange(ref skinActionMenuQueued')) `
+    'Concurrent skin events can still open duplicate action menus.'
 
 Assert-True (Test-Path -LiteralPath $ExecutablePath) 'Compiled executable is missing.'
 $versionInfo = (Get-Item -LiteralPath $ExecutablePath).VersionInfo

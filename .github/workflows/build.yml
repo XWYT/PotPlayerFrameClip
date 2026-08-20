@@ -25,7 +25,7 @@ jobs:
       - name: Build and verify
         shell: powershell
         run: |
-          $version = '0.3.0'
+          $version = '0.3.1'
           if ('${{ github.ref_type }}' -eq 'tag') {
             $version = '${{ github.ref_name }}'.TrimStart('v')
           }
