@@ -71,7 +71,11 @@ try {
     $frameClipConfig = [IO.File]::ReadAllText($frameClipConfigPath, [Text.UTF8Encoding]::new($false))
     Assert-True ($frameClipConfig.Contains('ExportRec709ForHdr=False')) 'HDR Rec.709 副本默认值不正确。'
     Assert-True ($frameClipConfig.Contains('Language=zh-CN')) '默认界面语言不正确。'
-    Assert-True ($frameClipConfig.Contains('PotPlayerMenuPath=' + $generatedMenu)) '配置没有记录 PotPlayer 菜单路径。'
+    $configuredMenuLine = @($frameClipConfig -split "`r?`n" | Where-Object { $_.StartsWith('PotPlayerMenuPath=', [StringComparison]::OrdinalIgnoreCase) }) | Select-Object -First 1
+    $configuredMenuPath = if ($configuredMenuLine) { $configuredMenuLine.Substring('PotPlayerMenuPath='.Length) } else { '' }
+    Assert-True ($configuredMenuPath -and [String]::Equals(
+        [IO.Path]::GetFullPath($configuredMenuPath), [IO.Path]::GetFullPath($generatedMenu), [StringComparison]::OrdinalIgnoreCase)) `
+        '配置没有记录正确的 PotPlayer 菜单路径。'
 
     # 重复安装必须保持幂等，不能嵌套或重复加入同一个子菜单。
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installScript `
