@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$Version = '0.2.0',
+    [string]$Version = '0.3.0',
     [switch]$SkipTests,
     [switch]$SkipInstaller
 )
@@ -51,7 +51,7 @@ New-Item -ItemType Directory -Force -Path $release | Out-Null
 New-Item -ItemType Directory -Force -Path $obj | Out-Null
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    throw 'Version must use the form major.minor.patch, for example 0.2.0.'
+    throw 'Version must use the form major.minor.patch, for example 0.3.0.'
 }
 $assemblyVersion = $Version + '.0'
 $generatedSource = Join-Path $obj 'PotPlayerFrameClip.generated.cs'
@@ -73,7 +73,7 @@ $compilerArguments = @(
     ('/win32manifest:' + (Join-Path $projectRoot 'app.manifest')),
     ('/out:' + $output),
     '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll',
-    '/reference:System.Windows.Forms.dll', '/reference:System.Management.dll', '/reference:Microsoft.CSharp.dll',
+    '/reference:System.Windows.Forms.dll', '/reference:System.Management.dll', '/reference:System.Xml.dll', '/reference:Microsoft.CSharp.dll',
     $generatedSource
 )
 & $compiler $compilerArguments

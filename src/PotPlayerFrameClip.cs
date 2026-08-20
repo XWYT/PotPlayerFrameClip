@@ -13,21 +13,20 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Xml;
 
 [assembly: AssemblyTitle("PotPlayer FrameClip")]
 [assembly: AssemblyDescription("Frame and source clip capture extension for PotPlayer")]
 [assembly: AssemblyProduct("PotPlayer FrameClip")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 PotPlayer FrameClip contributors")]
-[assembly: AssemblyVersion("0.2.0.0")]
-[assembly: AssemblyFileVersion("0.2.0.0")]
+[assembly: AssemblyVersion("0.3.0.0")]
+[assembly: AssemblyFileVersion("0.3.0.0")]
 
 namespace PotPlayerFrameClip
 {
     internal static class AppPaths
     {
         internal const string ProductName = "PotPlayer FrameClip";
-        internal const string MenuTitle = "参照帧与片段截取";
-
         internal static string DataDirectory
         {
             get
@@ -500,6 +499,236 @@ namespace PotPlayerFrameClip
         OpenVideoOutput
     }
 
+    internal static class UiText
+    {
+        internal const string Chinese = "zh-CN";
+        internal const string English = "en-US";
+
+        internal static string NormalizeLanguage(string value)
+        {
+            if (String.Equals(value, English, StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(value, "en", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(value, "English", StringComparison.OrdinalIgnoreCase)) return English;
+            return Chinese;
+        }
+
+        internal static bool IsEnglish(string language)
+        {
+            return NormalizeLanguage(language) == English;
+        }
+
+        internal static string Choose(string language, string chinese, string english)
+        {
+            return IsEnglish(language) ? english : chinese;
+        }
+
+        internal static string MenuTitle(string language)
+        {
+            return Choose(language, "参照帧与片段截取", "Reference Frame & Clip Capture");
+        }
+
+        internal static string ActionLabel(string language, CaptureAction action)
+        {
+            bool english = IsEnglish(language);
+            if (action == CaptureAction.CaptureFrame) return english
+                ? "Capture current frame (automatic color detection · 16-bit)"
+                : "截取当前帧（自动识别色彩 · 16-bit）";
+            if (action == CaptureAction.MarkIn) return english ? "Set in point" : "设置入点";
+            if (action == CaptureAction.MarkOut) return english ? "Set out point" : "设置出点";
+            if (action == CaptureAction.ExportOriginal) return english
+                ? "Export source clip (source color/DV + original audio)"
+                : "导出原码片段（保留源色彩/DV + 原音频）";
+            if (action == CaptureAction.ExportPrecise) return english
+                ? "Export precise clip (selectable codec + PCM)"
+                : "导出精确片段（可选编码 + PCM）";
+            if (action == CaptureAction.ClearRange) return english ? "Clear in and out points" : "清除入点和出点";
+            if (action == CaptureAction.Settings) return english ? "Settings…" : "设置…";
+            if (action == CaptureAction.OpenImageOutput) return english ? "Open current title image folder" : "打开当前作品图片文件夹";
+            if (action == CaptureAction.OpenVideoOutput) return english ? "Open current title video folder" : "打开当前作品视频文件夹";
+            return action.ToString();
+        }
+
+        internal static bool TryMapActionLabel(string title, out CaptureAction action)
+        {
+            action = CaptureAction.CaptureFrame;
+            foreach (CaptureAction candidate in Enum.GetValues(typeof(CaptureAction)))
+            {
+                if (title.StartsWith(ActionLabel(Chinese, candidate), StringComparison.Ordinal) ||
+                    title.StartsWith(ActionLabel(English, candidate), StringComparison.Ordinal))
+                {
+                    action = candidate;
+                    return true;
+                }
+            }
+            if (title.StartsWith("打开截图文件夹", StringComparison.Ordinal)) { action = CaptureAction.OpenImageOutput; return true; }
+            if (title.StartsWith("打开视频文件夹", StringComparison.Ordinal)) { action = CaptureAction.OpenVideoOutput; return true; }
+            return false;
+        }
+
+        internal static FormatChoice[] ImageChoices(string language)
+        {
+            return new[]
+            {
+                new FormatChoice("png16", Choose(language,
+                    "PNG · 16-bit RGB（推荐，可写入色彩标签）",
+                    "PNG · 16-bit RGB (recommended, supports color tags)")),
+                new FormatChoice("tiff16", Choose(language,
+                    "TIFF · 16-bit RGB（无损，需手动指定输入色彩空间）",
+                    "TIFF · 16-bit RGB (lossless, assign the input color space manually)"))
+            };
+        }
+
+        internal static FormatChoice[] VideoChoices(string language)
+        {
+            return new[]
+            {
+                new FormatChoice("prores422hq", Choose(language, "Apple ProRes 422 HQ · 10-bit（推荐）", "Apple ProRes 422 HQ · 10-bit (recommended)")),
+                new FormatChoice("prores4444", Choose(language, "Apple ProRes 4444 · 10-bit 4:4:4 输入", "Apple ProRes 4444 · 10-bit 4:4:4 input")),
+                new FormatChoice("prores4444xq", Choose(language, "Apple ProRes 4444 XQ · 10-bit 4:4:4 输入", "Apple ProRes 4444 XQ · 10-bit 4:4:4 input")),
+                new FormatChoice("dnxhrhqx", "Avid DNxHR HQX · 10-bit 4:2:2"),
+                new FormatChoice("dnxhr444", "Avid DNxHR 444 · 10-bit 4:4:4")
+            };
+        }
+
+        internal static FormatChoice[] LanguageChoices()
+        {
+            return new[]
+            {
+                new FormatChoice(Chinese, "简体中文"),
+                new FormatChoice(English, "English")
+            };
+        }
+    }
+
+    internal static class MenuLocalization
+    {
+        private static readonly CaptureAction[] MenuActions = new[]
+        {
+            CaptureAction.CaptureFrame, CaptureAction.MarkIn, CaptureAction.MarkOut,
+            CaptureAction.ExportOriginal, CaptureAction.ExportPrecise, CaptureAction.ClearRange,
+            CaptureAction.Settings, CaptureAction.OpenImageOutput, CaptureAction.OpenVideoOutput
+        };
+
+        internal static bool Apply(AppConfig config)
+        {
+            if (config == null || String.IsNullOrWhiteSpace(config.PotPlayerMenuPath) || !File.Exists(config.PotPlayerMenuPath)) return false;
+            try
+            {
+                return ApplyToFile(config.PotPlayerMenuPath, config.Language);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return ApplyElevated(config.PotPlayerMenuPath, config.Language);
+            }
+            catch { return false; }
+        }
+
+        internal static bool ApplyToFile(string path, string language)
+        {
+            XmlDocument document = new XmlDocument();
+            document.PreserveWhitespace = true;
+            document.Load(path);
+            XmlElement target = null;
+            foreach (XmlNode node in document.SelectNodes("/Menu/SubMenu"))
+            {
+                XmlElement submenu = node as XmlElement;
+                if (submenu == null) continue;
+                string name = submenu.GetAttribute("Name");
+                XmlElement firstCommand = submenu.SelectSingleNode("MenuItem[@CmdID != '']") as XmlElement;
+                string firstName = firstCommand == null ? String.Empty : firstCommand.GetAttribute("Name");
+                CaptureAction mapped;
+                if (name == UiText.MenuTitle(UiText.Chinese) || name == UiText.MenuTitle(UiText.English) ||
+                    name == "帧与片段" || UiText.TryMapActionLabel(firstName, out mapped))
+                {
+                    target = submenu;
+                    break;
+                }
+            }
+            if (target == null) return false;
+
+            target.SetAttribute("Name", UiText.MenuTitle(language));
+            List<XmlElement> commands = new List<XmlElement>();
+            foreach (XmlNode node in target.SelectNodes("MenuItem[@CmdID != '']"))
+            {
+                XmlElement element = node as XmlElement;
+                if (element != null) commands.Add(element);
+            }
+            if (commands.Count != MenuActions.Length) return false;
+
+            string normalizedLanguage = UiText.NormalizeLanguage(language);
+            bool changed = target.GetAttribute("Name") != UiText.MenuTitle(normalizedLanguage);
+            for (int index = 0; index < MenuActions.Length; index++)
+            {
+                string label = UiText.ActionLabel(normalizedLanguage, MenuActions[index]);
+                if (commands[index].GetAttribute("Name") != label) changed = true;
+            }
+            if (!changed) return true;
+
+            target.SetAttribute("Name", UiText.MenuTitle(normalizedLanguage));
+            for (int index = 0; index < MenuActions.Length; index++)
+                commands[index].SetAttribute("Name", UiText.ActionLabel(normalizedLanguage, MenuActions[index]));
+
+            string temporary = path + ".language.tmp";
+            string backup = path + ".language.bak";
+            XmlWriterSettings settings = new XmlWriterSettings();
+            settings.Encoding = new UTF8Encoding(false);
+            settings.Indent = true;
+            using (XmlWriter writer = XmlWriter.Create(temporary, settings)) document.Save(writer);
+            bool completed = false;
+            try
+            {
+                if (File.Exists(path))
+                {
+                    try
+                    {
+                        File.Replace(temporary, path, backup, true);
+                    }
+                    catch (IOException)
+                    {
+                        File.Copy(path, backup, true);
+                        try { File.Copy(temporary, path, true); }
+                        catch
+                        {
+                            File.Copy(backup, path, true);
+                            throw;
+                        }
+                    }
+                }
+                else File.Move(temporary, path);
+                completed = true;
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+                if (completed && File.Exists(backup)) File.Delete(backup);
+            }
+            return true;
+        }
+
+        private static bool ApplyElevated(string path, string language)
+        {
+            try
+            {
+                ProcessStartInfo start = new ProcessStartInfo();
+                start.FileName = Application.ExecutablePath;
+                start.Arguments = "--apply-menu-language " + QuoteArgument(language) + " " + QuoteArgument(path);
+                start.UseShellExecute = true;
+                start.Verb = "runas";
+                using (Process process = Process.Start(start))
+                {
+                    process.WaitForExit();
+                    return process.ExitCode == 0;
+                }
+            }
+            catch { return false; }
+        }
+
+        private static string QuoteArgument(string value)
+        {
+            return "\"" + (value ?? String.Empty).Replace("\"", "\\\"") + "\"";
+        }
+    }
+
     internal sealed class AppConfig
     {
         internal string LibraryRootDirectory = AppPaths.DefaultOutputDirectory;
@@ -507,6 +736,9 @@ namespace PotPlayerFrameClip
         internal string VideoPreset = "prores422hq";
         internal string FfmpegPath = String.Empty;
         internal string FfprobePath = String.Empty;
+        internal bool ExportRec709ForHdr;
+        internal string Language = UiText.Chinese;
+        internal string PotPlayerMenuPath = String.Empty;
 
         internal static string ConfigPath
         {
@@ -552,9 +784,17 @@ namespace PotPlayerFrameClip
                 if (key.Equals("VideoPreset", StringComparison.OrdinalIgnoreCase)) config.VideoPreset = value;
                 if (key.Equals("FFmpeg", StringComparison.OrdinalIgnoreCase)) config.FfmpegPath = value;
                 if (key.Equals("FFprobe", StringComparison.OrdinalIgnoreCase)) config.FfprobePath = value;
+                if (key.Equals("ExportRec709ForHdr", StringComparison.OrdinalIgnoreCase))
+                {
+                    bool enabled;
+                    if (Boolean.TryParse(value, out enabled)) config.ExportRec709ForHdr = enabled;
+                }
+                if (key.Equals("Language", StringComparison.OrdinalIgnoreCase)) config.Language = value;
+                if (key.Equals("PotPlayerMenuPath", StringComparison.OrdinalIgnoreCase)) config.PotPlayerMenuPath = value;
             }
             config.ImageFormat = CaptureFormats.NormalizeImageFormat(config.ImageFormat);
             config.VideoPreset = CaptureFormats.NormalizeVideoPreset(config.VideoPreset);
+            config.Language = UiText.NormalizeLanguage(config.Language);
             config.LocateTools();
             if (legacyConfig)
             {
@@ -581,7 +821,10 @@ namespace PotPlayerFrameClip
                 "ImageFormat=" + CaptureFormats.NormalizeImageFormat(ImageFormat),
                 "VideoPreset=" + CaptureFormats.NormalizeVideoPreset(VideoPreset),
                 "FFmpeg=" + FfmpegPath,
-                "FFprobe=" + FfprobePath
+                "FFprobe=" + FfprobePath,
+                "ExportRec709ForHdr=" + ExportRec709ForHdr.ToString(),
+                "Language=" + UiText.NormalizeLanguage(Language),
+                "PotPlayerMenuPath=" + PotPlayerMenuPath
             };
             string temporary = ConfigPath + ".tmp";
             File.WriteAllLines(temporary, lines, new UTF8Encoding(false));
@@ -1459,15 +1702,23 @@ namespace PotPlayerFrameClip
     internal sealed class SettingsForm : Form
     {
         private readonly AppConfig config;
+        private readonly string displayLanguage;
         private readonly TextBox libraryRootTextBox;
         private readonly TextBox ffmpegPathTextBox;
         private readonly ComboBox imageFormatComboBox;
         private readonly ComboBox videoPresetComboBox;
+        private readonly ComboBox languageComboBox;
+        private readonly CheckBox rec709CheckBox;
+
+        internal bool LanguageChanged { get; private set; }
+        internal bool MenuLanguageApplied { get; private set; }
 
         internal SettingsForm(AppConfig config)
         {
             this.config = config;
-            Text = "参照帧与片段截取设置";
+            displayLanguage = UiText.NormalizeLanguage(config.Language);
+            MenuLanguageApplied = true;
+            Text = UiText.Choose(displayLanguage, "参照帧与片段截取设置", "Reference Frame & Clip Capture Settings");
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen;
             MaximizeBox = false;
@@ -1475,26 +1726,26 @@ namespace PotPlayerFrameClip
             ShowInTaskbar = false;
             TopMost = true;
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(720, 500);
+            ClientSize = new Size(720, 590);
             Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular);
 
-            Label heading = CreateLabel("输出与编码", 24, 20, 650, 30, 13f, FontStyle.Bold);
+            Label heading = CreateLabel(UiText.Choose(displayLanguage, "输出与编码", "Output and Encoding"), 24, 20, 650, 30, 13f, FontStyle.Bold);
             Controls.Add(heading);
 
-            Controls.Add(CreateLabel("输出根目录", 24, 68, 220, 24, 9f, FontStyle.Regular));
+            Controls.Add(CreateLabel(UiText.Choose(displayLanguage, "输出根目录", "Output root folder"), 24, 68, 220, 24, 9f, FontStyle.Regular));
             libraryRootTextBox = CreatePathTextBox(config.LibraryRootDirectory, 24, 94);
             Controls.Add(libraryRootTextBox);
             Controls.Add(CreateBrowseButton(libraryRootTextBox, 616, 93));
 
-            Controls.Add(CreateLabel("图片格式", 24, 158, 160, 24, 9f, FontStyle.Regular));
+            Controls.Add(CreateLabel(UiText.Choose(displayLanguage, "图片格式", "Image format"), 24, 158, 160, 24, 9f, FontStyle.Regular));
             imageFormatComboBox = CreateChoiceComboBox(24, 184, 320);
-            foreach (FormatChoice choice in CaptureFormats.ImageChoices) imageFormatComboBox.Items.Add(choice);
+            foreach (FormatChoice choice in UiText.ImageChoices(displayLanguage)) imageFormatComboBox.Items.Add(choice);
             SelectChoice(imageFormatComboBox, CaptureFormats.NormalizeImageFormat(config.ImageFormat));
             Controls.Add(imageFormatComboBox);
 
-            Controls.Add(CreateLabel("精确片段编码", 370, 158, 260, 24, 9f, FontStyle.Regular));
+            Controls.Add(CreateLabel(UiText.Choose(displayLanguage, "精确片段编码", "Precise clip codec"), 370, 158, 260, 24, 9f, FontStyle.Regular));
             videoPresetComboBox = CreateChoiceComboBox(370, 184, 326);
-            foreach (FormatChoice choice in CaptureFormats.VideoChoices) videoPresetComboBox.Items.Add(choice);
+            foreach (FormatChoice choice in UiText.VideoChoices(displayLanguage)) videoPresetComboBox.Items.Add(choice);
             SelectChoice(videoPresetComboBox, CaptureFormats.NormalizeVideoPreset(config.VideoPreset));
             Controls.Add(videoPresetComboBox);
 
@@ -1503,19 +1754,35 @@ namespace PotPlayerFrameClip
             Controls.Add(ffmpegPathTextBox);
             Controls.Add(CreateFileBrowseButton(ffmpegPathTextBox, 616, 267));
 
-            Label note = CreateLabel("程序会自动建立“根目录\\作品名\\图片”和“根目录\\作品名\\视频”。同一剧集的不同季集、分辨率、编码和发行命名会复用同一作品文件夹。PNG 可携带源色彩标签；TIFF 的标签支持因软件而异，请按文件名和源信息确认解释方式。", 24, 326, 672, 72, 8.5f, FontStyle.Regular);
+            rec709CheckBox = new CheckBox();
+            rec709CheckBox.Text = UiText.Choose(displayLanguage,
+                "HDR 截图同时生成 Rec.709 SDR 参照（色调映射）",
+                "Also generate a tone-mapped Rec.709 SDR reference for HDR captures");
+            rec709CheckBox.Checked = config.ExportRec709ForHdr;
+            rec709CheckBox.SetBounds(24, 326, 672, 28);
+            Controls.Add(rec709CheckBox);
+
+            Controls.Add(CreateLabel(UiText.Choose(displayLanguage, "界面与菜单语言", "Interface and menu language"), 24, 370, 260, 24, 9f, FontStyle.Regular));
+            languageComboBox = CreateChoiceComboBox(24, 396, 260);
+            foreach (FormatChoice choice in UiText.LanguageChoices()) languageComboBox.Items.Add(choice);
+            SelectChoice(languageComboBox, displayLanguage);
+            Controls.Add(languageComboBox);
+
+            Label note = CreateLabel(UiText.Choose(displayLanguage,
+                "程序会自动建立“根目录\\作品名\\图片”和“根目录\\作品名\\视频”。HDR 的 Rec.709 副本是用于普通 SDR 监看的色调映射参照，不替代同时保存的 HDR 原图。PNG 可携带色彩标签；TIFF 建议按文件名手动指定输入色彩空间。",
+                "FrameClip creates title-specific Images and Videos folders automatically. The Rec.709 copy is a tone-mapped SDR viewing reference and does not replace the HDR original. PNG supports color tags; assign TIFF input color space from the filename when needed."), 24, 438, 672, 72, 8.5f, FontStyle.Regular);
             note.ForeColor = Color.FromArgb(80, 84, 90);
             Controls.Add(note);
 
             Button cancelButton = new Button();
-            cancelButton.Text = "取消";
+            cancelButton.Text = UiText.Choose(displayLanguage, "取消", "Cancel");
             cancelButton.DialogResult = DialogResult.Cancel;
-            cancelButton.SetBounds(508, 442, 90, 34);
+            cancelButton.SetBounds(508, 532, 90, 34);
             Controls.Add(cancelButton);
 
             Button saveButton = new Button();
-            saveButton.Text = "保存";
-            saveButton.SetBounds(606, 442, 90, 34);
+            saveButton.Text = UiText.Choose(displayLanguage, "保存", "Save");
+            saveButton.SetBounds(606, 532, 90, 34);
             saveButton.Click += SaveButtonClick;
             Controls.Add(saveButton);
 
@@ -1551,13 +1818,13 @@ namespace PotPlayerFrameClip
         private Button CreateBrowseButton(TextBox target, int left, int top)
         {
             Button button = new Button();
-            button.Text = "浏览…";
+            button.Text = UiText.Choose(displayLanguage, "浏览…", "Browse…");
             button.SetBounds(left, top, 80, 30);
             button.Click += delegate
             {
                 using (FolderBrowserDialog dialog = new FolderBrowserDialog())
                 {
-                    dialog.Description = "选择输出文件夹";
+                    dialog.Description = UiText.Choose(displayLanguage, "选择输出文件夹", "Select the output folder");
                     if (Directory.Exists(target.Text)) dialog.SelectedPath = target.Text;
                     if (dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.SelectedPath;
                 }
@@ -1568,14 +1835,14 @@ namespace PotPlayerFrameClip
         private Button CreateFileBrowseButton(TextBox target, int left, int top)
         {
             Button button = new Button();
-            button.Text = "浏览…";
+            button.Text = UiText.Choose(displayLanguage, "浏览…", "Browse…");
             button.SetBounds(left, top, 80, 30);
             button.Click += delegate
             {
                 using (OpenFileDialog dialog = new OpenFileDialog())
                 {
-                    dialog.Title = "选择 ffmpeg.exe";
-                    dialog.Filter = "FFmpeg|ffmpeg.exe|可执行文件|*.exe";
+                    dialog.Title = UiText.Choose(displayLanguage, "选择 ffmpeg.exe", "Select ffmpeg.exe");
+                    dialog.Filter = UiText.Choose(displayLanguage, "FFmpeg|ffmpeg.exe|可执行文件|*.exe", "FFmpeg|ffmpeg.exe|Executable files|*.exe");
                     if (File.Exists(target.Text)) dialog.InitialDirectory = Path.GetDirectoryName(target.Text);
                     if (dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.FileName;
                 }
@@ -1610,7 +1877,9 @@ namespace PotPlayerFrameClip
             string libraryRoot = libraryRootTextBox.Text.Trim();
             if (libraryRoot.Length == 0)
             {
-                MessageBox.Show(this, "输出根目录不能为空。", "无法保存", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this,
+                    UiText.Choose(displayLanguage, "输出根目录不能为空。", "The output root folder cannot be empty."),
+                    UiText.Choose(displayLanguage, "无法保存", "Cannot save"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -1619,9 +1888,14 @@ namespace PotPlayerFrameClip
                 Directory.CreateDirectory(libraryRoot);
                 FormatChoice imageChoice = imageFormatComboBox.SelectedItem as FormatChoice;
                 FormatChoice videoChoice = videoPresetComboBox.SelectedItem as FormatChoice;
+                FormatChoice languageChoice = languageComboBox.SelectedItem as FormatChoice;
                 config.LibraryRootDirectory = Path.GetFullPath(libraryRoot);
                 config.ImageFormat = imageChoice == null ? "png16" : imageChoice.Value;
                 config.VideoPreset = videoChoice == null ? "prores422hq" : videoChoice.Value;
+                config.ExportRec709ForHdr = rec709CheckBox.Checked;
+                string selectedLanguage = languageChoice == null ? UiText.Chinese : UiText.NormalizeLanguage(languageChoice.Value);
+                LanguageChanged = selectedLanguage != displayLanguage;
+                config.Language = selectedLanguage;
                 config.FfmpegPath = ffmpegPathTextBox.Text.Trim();
                 string ffmpegDirectory = String.IsNullOrWhiteSpace(config.FfmpegPath)
                     ? String.Empty
@@ -1631,12 +1905,15 @@ namespace PotPlayerFrameClip
                     : Path.Combine(ffmpegDirectory, "ffprobe.exe");
                 config.LocateTools();
                 config.Save();
+                MenuLanguageApplied = MenuLocalization.Apply(config);
                 DialogResult = DialogResult.OK;
                 Close();
             }
             catch (Exception exception)
             {
-                MessageBox.Show(this, "无法保存设置：" + exception.Message, "保存失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this,
+                    UiText.Choose(displayLanguage, "无法保存设置：", "Unable to save settings: ") + exception.Message,
+                    UiText.Choose(displayLanguage, "保存失败", "Save failed"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }
@@ -1743,6 +2020,16 @@ namespace PotPlayerFrameClip
             get { return Thread.VolatileRead(ref busy) != 0; }
         }
 
+        private string T(string chinese, string english)
+        {
+            return UiText.Choose(config.Language, chinese, english);
+        }
+
+        private string MenuTitle
+        {
+            get { return UiText.MenuTitle(config.Language); }
+        }
+
         internal void Execute(CaptureAction action)
         {
             if (action == CaptureAction.Settings)
@@ -1762,7 +2049,7 @@ namespace PotPlayerFrameClip
                 catch (Exception exception)
                 {
                     WriteErrorLog(exception);
-                    ShowToast("打开文件夹失败", Shorten(exception.Message, 100), 5000);
+                    ShowToast(T("打开文件夹失败", "Unable to open folder"), Shorten(exception.Message, 100), 5000);
                 }
                 return;
             }
@@ -1771,7 +2058,7 @@ namespace PotPlayerFrameClip
             {
                 RangeState state = RangeState.Load();
                 state.Clear();
-                ShowToast(AppPaths.MenuTitle, "入点和出点已清除。", 2500);
+                ShowToast(MenuTitle, T("入点和出点已清除。", "In and out points cleared."), 2500);
                 return;
             }
 
@@ -1783,7 +2070,7 @@ namespace PotPlayerFrameClip
 
             if (Interlocked.CompareExchange(ref busy, 1, 0) != 0)
             {
-                ShowToast(AppPaths.MenuTitle, "已有导出任务正在运行。", 3000);
+                ShowToast(MenuTitle, T("已有导出任务正在运行。", "Another export task is already running."), 3000);
                 return;
             }
 
@@ -1798,7 +2085,7 @@ namespace PotPlayerFrameClip
                 catch (Exception exception)
                 {
                     WriteErrorLog(exception);
-                    ShowToast("导出失败", Shorten(exception.Message, 100), 6500);
+                    ShowToast(T("导出失败", "Export failed"), Shorten(exception.Message, 100), 6500);
                 }
                 finally
                 {
@@ -1811,7 +2098,7 @@ namespace PotPlayerFrameClip
         {
             if (Interlocked.CompareExchange(ref settingsOpen, 1, 0) != 0)
             {
-                ShowToast(AppPaths.MenuTitle, "设置窗口已经打开。", 2500);
+                ShowToast(MenuTitle, T("设置窗口已经打开。", "The settings window is already open."), 2500);
                 return;
             }
             Action show = delegate
@@ -1821,7 +2108,16 @@ namespace PotPlayerFrameClip
                     using (SettingsForm settings = new SettingsForm(config))
                     {
                         if (settings.ShowDialog() == DialogResult.OK)
-                            ShowToast("设置已保存", "新的输出位置和格式会从下一次截取或导出开始生效。", 4500);
+                        {
+                            string message = T(
+                                "新的输出位置和格式会从下一次截取或导出开始生效。",
+                                "The new output location and formats apply to the next capture or export.");
+                            if (settings.LanguageChanged && settings.MenuLanguageApplied)
+                                message = T("语言已切换。请重新打开 PotPlayer 以刷新自定义菜单。", "Language changed. Restart PotPlayer to refresh its custom menu.");
+                            else if (!settings.MenuLanguageApplied)
+                                message = T("程序语言已保存，但无法更新 PotPlayer 菜单文件；请重新安装后再切换语言。", "The application language was saved, but the PotPlayer menu file could not be updated. Reinstall before changing the language again.");
+                            ShowToast(T("设置已保存", "Settings saved"), message, settings.LanguageChanged ? 6500 : 4500);
+                        }
                     }
                 }
                 finally { Interlocked.Exchange(ref settingsOpen, 0); }
@@ -1867,7 +2163,7 @@ namespace PotPlayerFrameClip
             string readError = GetPlaybackReadError(player, source, current);
             if (!String.IsNullOrEmpty(readError))
             {
-                ShowToast(AppPaths.MenuTitle, readError, 5000);
+                ShowToast(MenuTitle, readError, 5000);
                 return;
             }
 
@@ -1882,8 +2178,10 @@ namespace PotPlayerFrameClip
             if (action == CaptureAction.MarkOut) state.OutMilliseconds = current;
             state.Save();
 
-            string label = action == CaptureAction.MarkIn ? "入点" : "出点";
-            ShowToast("已设置" + label, FormatTime(current) + "  |  " + Path.GetFileName(source), 3500);
+            string title = action == CaptureAction.MarkIn
+                ? T("已设置入点", "In point set")
+                : T("已设置出点", "Out point set");
+            ShowToast(title, FormatTime(current) + "  |  " + Path.GetFileName(source), 3500);
         }
 
         private void CaptureCurrentFrame()
@@ -1915,7 +2213,9 @@ namespace PotPlayerFrameClip
                 : "scale=in_range=" + range + ":out_range=full:in_color_matrix=" + matrix + ":out_color_matrix=" + matrix + ",format=" + rgbPixelFormat) + colorTags;
             string formatDescription = useTiff ? "16-bit TIFF" : "16-bit PNG";
 
-            ShowToast("正在截取当前帧", paths.WorkTitle + "  |  " + FormatTime(current) + " · " + GetColorDescription(info) + " · " + formatDescription, 4000);
+            bool createRec709 = config.ExportRec709ForHdr && (info.IsPq || info.IsHlg);
+            string taskSuffix = createRec709 ? T(" · 同时生成 Rec.709 SDR", " · plus Rec.709 SDR") : String.Empty;
+            ShowToast(T("正在截取当前帧", "Capturing current frame"), paths.WorkTitle + "  |  " + FormatTime(current) + " · " + GetColorDescription(info) + " · " + formatDescription + taskSuffix, 4000);
 
             string codecArguments = useTiff ? "-c:v tiff -compression_algo deflate -update 1" : "-c:v png -pred mixed -update 1";
             string imageArguments = "-hide_banner -loglevel error -y -ss " + seek + " -i " + Quote(source) +
@@ -1923,8 +2223,48 @@ namespace PotPlayerFrameClip
                 " -color_range pc -color_primaries " + info.ColorPrimaries + " -color_trc " + info.ColorTransfer + " " + Quote(imagePath);
             RunProcess(config.FfmpegPath, imageArguments, useTiff ? "TIFF frame" : "PNG frame");
 
-            string tiffWarning = useTiff ? "  |  TIFF 请按文件名手动指定 输入色彩空间" : String.Empty;
-            ShowToast("当前帧已完成", Path.GetFileName(imagePath) + GetColorWarning(info) + tiffWarning, info.IsDolbyVision || info.MetadataAssumed || useTiff ? 8000 : 5000);
+            string rec709Path = null;
+            Exception rec709Failure = null;
+            if (createRec709)
+            {
+                rec709Path = BuildAvailableOutputPath(paths.ImageDirectory, stem + "_Rec709-SDR-TONEMAPPED_16bit", extension);
+                string rec709Filter = BuildRec709ToneMapFilter(info, rgbPixelFormat);
+                string rec709Arguments = "-hide_banner -loglevel error -y -ss " + seek + " -i " + Quote(source) +
+                    " -map 0:v:0 -frames:v 1 -vf " + Quote(rec709Filter) + " " + codecArguments +
+                    " -color_range pc -color_primaries bt709 -color_trc bt709 " + Quote(rec709Path);
+                try
+                {
+                    RunProcess(config.FfmpegPath, rec709Arguments, "Rec.709 tone-mapped frame");
+                }
+                catch (Exception exception)
+                {
+                    rec709Failure = exception;
+                    WriteErrorLog(exception);
+                }
+            }
+
+            string tiffWarning = useTiff ? T("  |  TIFF 请按文件名手动指定输入色彩空间", "  |  Assign TIFF input color space from the filename") : String.Empty;
+            if (rec709Failure != null)
+            {
+                ShowToast(T("HDR 原图已完成", "HDR original completed"),
+                    Path.GetFileName(imagePath) + T("  |  Rec.709 副本失败：", "  |  Rec.709 copy failed: ") + Shorten(rec709Failure.Message, 90) + tiffWarning, 9000);
+                return;
+            }
+            string completedFiles = Path.GetFileName(imagePath);
+            if (rec709Path != null) completedFiles += "  +  " + Path.GetFileName(rec709Path);
+            ShowToast(T("当前帧已完成", "Frame capture completed"), completedFiles + GetColorWarning(info) + tiffWarning,
+                info.IsDolbyVision || info.MetadataAssumed || useTiff || rec709Path != null ? 8000 : 5000);
+        }
+
+        internal static string BuildRec709ToneMapFilter(VideoInfo info, string rgbPixelFormat)
+        {
+            string inputRange = info.ColorRange.Equals("pc", StringComparison.OrdinalIgnoreCase) ? "full" : "limited";
+            string inputMatrix = NormalizeZscaleMatrix(info.ColorSpace);
+            return "zscale=rin=" + inputRange + ":pin=" + info.ColorPrimaries + ":tin=" + info.ColorTransfer +
+                ":min=" + inputMatrix + ":t=linear:npl=100,format=gbrpf32le," +
+                "tonemap=mobius:param=0.3:desat=2," +
+                "zscale=p=bt709:t=bt709:m=gbr:r=full,format=" + rgbPixelFormat +
+                ",setparams=range=full:color_primaries=bt709:color_trc=bt709:colorspace=gbr";
         }
 
         private void ExportOriginalRange()
@@ -1936,7 +2276,7 @@ namespace PotPlayerFrameClip
             string output = BuildAvailableOutputPath(paths.VideoDirectory,
                 BuildRangeStem(range.SourcePath, range.InMilliseconds, range.OutMilliseconds, "Original") + "_" + GetFileColorLabel(info), ".mkv");
             long duration = range.OutMilliseconds - range.InMilliseconds;
-            ShowToast("正在导出原码片段", FormatDuration(duration) + "  |  " + GetColorDescription(info) + " · 保留源编码与原音频", 4000);
+            ShowToast(T("正在导出原码片段", "Exporting source clip"), FormatDuration(duration) + "  |  " + GetColorDescription(info) + T(" · 保留源编码与原音频", " · source codec and original audio"), 4000);
 
             // 流复制可以保留源视频、音频、字幕及容器元数据，但起点受关键帧结构约束。
             // 需要严格切点时由“精确片段”承担重新编码成本。
@@ -1944,7 +2284,7 @@ namespace PotPlayerFrameClip
                 " -i " + Quote(range.SourcePath) + " -t " + Seconds(duration) +
                 " -map 0:v:0 -map 0:a? -map 0:s? -map_metadata 0 -map_chapters 0 -c copy -avoid_negative_ts make_zero " + Quote(output);
             RunProcess(config.FfmpegPath, arguments, "original range");
-            ShowToast("原码片段已完成", Path.GetFileName(output), 5500);
+            ShowToast(T("原码片段已完成", "Source clip completed"), Path.GetFileName(output), 5500);
         }
 
         private void ExportPreciseRange()
@@ -1959,7 +2299,7 @@ namespace PotPlayerFrameClip
                 BuildRangeStem(range.SourcePath, range.InMilliseconds, range.OutMilliseconds, "Precise") + "_" + GetFileColorLabel(info) + "_" + encoding.Token,
                 encoding.Extension);
             long duration = range.OutMilliseconds - range.InMilliseconds;
-            ShowToast("正在导出精确片段", FormatDuration(duration) + "  |  " + GetColorDescription(info) + " · " + encoding.DisplayName + " + PCM", 4500);
+            ShowToast(T("正在导出精确片段", "Exporting precise clip"), FormatDuration(duration) + "  |  " + GetColorDescription(info) + " · " + encoding.DisplayName + " + PCM", 4500);
 
             string arguments = "-hide_banner -loglevel error -y -ss " + Seconds(range.InMilliseconds) +
                 " -i " + Quote(range.SourcePath) + " -t " + Seconds(duration) +
@@ -1970,7 +2310,7 @@ namespace PotPlayerFrameClip
                 " -colorspace " + NormalizeOutputColorSpace(info) + " -color_primaries " + info.ColorPrimaries +
                 " -color_trc " + info.ColorTransfer + " -c:a pcm_s24le -ar 48000 -movflags +write_colr " + Quote(output);
             RunProcess(config.FfmpegPath, arguments, "precise range");
-            ShowToast("精确片段已完成", Path.GetFileName(output) + GetColorWarning(info), info.IsDolbyVision || info.MetadataAssumed ? 8000 : 5500);
+            ShowToast(T("精确片段已完成", "Precise clip completed"), Path.GetFileName(output) + GetColorWarning(info), info.IsDolbyVision || info.MetadataAssumed ? 8000 : 5500);
         }
 
         private RangeState GetValidRange()
@@ -1979,13 +2319,13 @@ namespace PotPlayerFrameClip
             IntPtr player = FindPotPlayerWindow();
             string source = GetCurrentSource(player);
             if (String.IsNullOrEmpty(range.SourcePath) || range.InMilliseconds < 0 || range.OutMilliseconds < 0)
-                throw new InvalidOperationException("请先在右键菜单中设置入点和出点。");
+                throw new InvalidOperationException(T("请先在右键菜单中设置入点和出点。", "Set an in point and an out point from the context menu first."));
             if (range.OutMilliseconds <= range.InMilliseconds)
-                throw new InvalidOperationException("出点必须晚于入点。");
+                throw new InvalidOperationException(T("出点必须晚于入点。", "The out point must be later than the in point."));
             if (!String.IsNullOrEmpty(source) && !String.Equals(source, range.SourcePath, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("当前播放文件与已设置入出点的文件不同。");
+                throw new InvalidOperationException(T("当前播放文件与已设置入出点的文件不同。", "The current media file is different from the file used for the saved in and out points."));
             if (!File.Exists(range.SourcePath))
-                throw new FileNotFoundException("找不到入出点对应的源文件。", range.SourcePath);
+                throw new FileNotFoundException(T("找不到入出点对应的源文件。", "The source file for the saved in and out points was not found."), range.SourcePath);
             return range;
         }
 
@@ -2078,22 +2418,26 @@ namespace PotPlayerFrameClip
             }
         }
 
-        private static void EnsureDolbyVisionDecodeIsReferenceSafe(VideoInfo info)
+        private void EnsureDolbyVisionDecodeIsReferenceSafe(VideoInfo info)
         {
             if (!info.IsDolbyVision) return;
             // Profile 5 等源通常没有可独立解释的 HDR10/HLG 基础层。直接交给普通 FFmpeg
             // 解码会得到偏色画面，因此宁可拒绝生成参照，也不输出看似正常的错误图片。
             if (info.DolbyVisionProfile == 5 || info.DolbyVisionCompatibilityId == 0)
-                throw new InvalidOperationException("该 Dolby Vision 源没有可可靠解码的 HDR10/HLG 兼容基础层，不能生成准确参照。请使用带兼容基础层的 Profile 7/8 版本；原码片段仍可保留。 ");
+                throw new InvalidOperationException(T(
+                    "该 Dolby Vision 源没有可可靠解码的 HDR10/HLG 兼容基础层，不能生成准确参照。请使用带兼容基础层的 Profile 7/8 版本；原码片段仍可保留。",
+                    "This Dolby Vision source has no reliably decodable HDR10/HLG-compatible base layer. Use a Profile 7/8 source with a compatible base layer; source-copy clips can still be preserved."));
         }
 
-        private static void EnsureFrameMatrixIsReferenceSafe(VideoInfo info)
+        private void EnsureFrameMatrixIsReferenceSafe(VideoInfo info)
         {
             if (IsRgbPixelFormat(info.PixelFormat)) return;
             string matrix = info.ColorSpace.ToLowerInvariant();
             if (matrix == "bt709" || matrix == "bt2020nc" || matrix == "bt2020ncl" || matrix == "bt470bg" ||
                 matrix == "smpte170m" || matrix == "fcc" || matrix == "smpte240m") return;
-            throw new InvalidOperationException("该片源使用插件尚不能无损还原的 YUV 矩阵（" + info.ColorSpace + "），已停止截图以避免生成错误参照。原码片段仍可保留。 ");
+            throw new InvalidOperationException(T(
+                "该片源使用插件尚不能无损还原的 YUV 矩阵（" + info.ColorSpace + "），已停止截图以避免生成错误参照。原码片段仍可保留。",
+                "This source uses a YUV matrix that FrameClip cannot reconstruct safely (" + info.ColorSpace + "). Frame capture was stopped to avoid an incorrect reference; source-copy clips remain available."));
         }
 
         private static bool IsUnknown(string value)
@@ -2119,12 +2463,12 @@ namespace PotPlayerFrameClip
             return SanitizeToken(info.ColorPrimaries) + "-" + TransferFileToken(info.ColorTransfer);
         }
 
-        private static string GetColorDescription(VideoInfo info)
+        private string GetColorDescription(VideoInfo info)
         {
             if (info.IsDolbyVision)
             {
                 string baseDescription = info.IsPq ? "Rec.2100 PQ" : (info.IsHlg ? "Rec.2100 HLG" : info.ColorPrimaries + " / " + TransferDisplayName(info.ColorTransfer));
-                return "Dolby Vision" + (info.DolbyVisionProfile > 0 ? " P" + info.DolbyVisionProfile.ToString(CultureInfo.InvariantCulture) : String.Empty) + " / " + baseDescription + " 基础层";
+                return "Dolby Vision" + (info.DolbyVisionProfile > 0 ? " P" + info.DolbyVisionProfile.ToString(CultureInfo.InvariantCulture) : String.Empty) + " / " + baseDescription + T(" 基础层", " base layer");
             }
             if (info.IsPq) return "Rec.2100 PQ";
             if (info.IsHlg) return "Rec.2100 HLG";
@@ -2133,11 +2477,11 @@ namespace PotPlayerFrameClip
             return info.ColorPrimaries + " / " + TransferDisplayName(info.ColorTransfer);
         }
 
-        private static string GetColorWarning(VideoInfo info)
+        private string GetColorWarning(VideoInfo info)
         {
-            if (info.IsDolbyVision && info.MetadataAssumed) return "  |  DV 动态映射未烘焙；部分色彩元数据为推定值";
-            if (info.IsDolbyVision) return "  |  DV 动态映射未烘焙，输出为可解码基础层";
-            if (info.MetadataAssumed) return "  |  源文件色彩元数据不完整，文件名已标记 ASSUMED";
+            if (info.IsDolbyVision && info.MetadataAssumed) return T("  |  DV 动态映射未烘焙；部分色彩元数据为推定值", "  |  DV dynamic mapping is not baked in; some color metadata was inferred");
+            if (info.IsDolbyVision) return T("  |  DV 动态映射未烘焙，输出为可解码基础层", "  |  DV dynamic mapping is not baked in; output uses the decodable base layer");
+            if (info.MetadataAssumed) return T("  |  源文件色彩元数据不完整，文件名已标记 ASSUMED", "  |  Source color metadata is incomplete; the filename is marked ASSUMED");
             return String.Empty;
         }
 
@@ -2198,7 +2542,7 @@ namespace PotPlayerFrameClip
                 string stderr = process.StandardError.ReadToEnd();
                 process.WaitForExit();
                 if (process.ExitCode != 0)
-                    throw new InvalidOperationException(operation + " 失败：" + Shorten(stderr.Trim(), 240));
+                    throw new InvalidOperationException(operation + T(" 失败：", " failed: ") + Shorten(stderr.Trim(), 240));
                 return stdout;
             }
         }
@@ -2207,7 +2551,9 @@ namespace PotPlayerFrameClip
         {
             config.LocateTools();
             if (!File.Exists(config.FfmpegPath) || !File.Exists(config.FfprobePath))
-                throw new FileNotFoundException("找不到 FFmpeg/FFprobe。请打开“参照帧与片段截取 > 设置”选择 ffmpeg.exe，或将 FFmpeg 加入 PATH。", config.FfmpegPath);
+                throw new FileNotFoundException(T(
+                    "找不到 FFmpeg/FFprobe。请打开“参照帧与片段截取 > 设置”选择 ffmpeg.exe，或将 FFmpeg 加入 PATH。",
+                    "FFmpeg/FFprobe was not found. Open Reference Frame & Clip Capture > Settings and select ffmpeg.exe, or add FFmpeg to PATH."), config.FfmpegPath);
         }
 
         private IntPtr FindPotPlayerWindow()
@@ -2374,13 +2720,13 @@ namespace PotPlayerFrameClip
 
         private string GetPlaybackReadError(IntPtr player, string source, long current)
         {
-            if (player == IntPtr.Zero) return "未找到正在播放的 PotPlayer 窗口。";
+            if (player == IntPtr.Zero) return T("未找到正在播放的 PotPlayer 窗口。", "No active PotPlayer playback window was found.");
             if (String.IsNullOrEmpty(source))
             {
                 string title = GetWindowTitle(player);
-                return "已找到 PotPlayer，但无法定位当前本地媒体文件。窗口标题：" + Shorten(title, 72);
+                return T("已找到 PotPlayer，但无法定位当前本地媒体文件。窗口标题：", "PotPlayer was found, but the current local media file could not be located. Window title: ") + Shorten(title, 72);
             }
-            if (current < 0) return "已定位当前媒体，但无法读取 PotPlayer 播放时间。";
+            if (current < 0) return T("已定位当前媒体，但无法读取 PotPlayer 播放时间。", "The current media file was located, but the PotPlayer playback time could not be read.");
             return null;
         }
 
@@ -2414,12 +2760,12 @@ namespace PotPlayerFrameClip
             return stem + "_TO_" + FileTime(outMilliseconds) + "_" + kind;
         }
 
-        private static string BuildAvailableOutputPath(string directory, string stem, string extension)
+        private string BuildAvailableOutputPath(string directory, string stem, string extension)
         {
             const int conservativePathLimit = 240;
             int maximumStemLength = conservativePathLimit - directory.Length - extension.Length - 1;
             if (maximumStemLength < 24)
-                throw new PathTooLongException("输出目录路径过长，请在插件设置中选择更短的参考素材库根目录。");
+                throw new PathTooLongException(T("输出目录路径过长，请在插件设置中选择更短的参考素材库根目录。", "The output path is too long. Choose a shorter reference-library root folder in Settings."));
 
             string fittedStem = FitOutputStem(stem, maximumStemLength);
             string candidate = Path.Combine(directory, fittedStem + extension);
@@ -2432,7 +2778,7 @@ namespace PotPlayerFrameClip
                 candidate = Path.Combine(directory, fittedStem + extension);
                 if (!File.Exists(candidate)) return candidate;
             }
-            throw new IOException("同一时间码的输出文件过多，请整理该作品目录后重试。");
+            throw new IOException(T("同一时间码的输出文件过多，请整理该作品目录后重试。", "Too many files exist for the same timecode. Organize the title folder and try again."));
         }
 
         private static string FitOutputStem(string stem, int maximumLength)
@@ -2483,6 +2829,15 @@ namespace PotPlayerFrameClip
             if (matrix.Equals("bt470bg", StringComparison.OrdinalIgnoreCase) || matrix.Equals("smpte170m", StringComparison.OrdinalIgnoreCase)) return "bt601";
             if (matrix.Equals("fcc", StringComparison.OrdinalIgnoreCase)) return "fcc";
             if (matrix.Equals("smpte240m", StringComparison.OrdinalIgnoreCase)) return "smpte240m";
+            return "bt709";
+        }
+
+        private static string NormalizeZscaleMatrix(string matrix)
+        {
+            string value = (matrix ?? String.Empty).ToLowerInvariant();
+            if (value == "bt2020ncl") return "bt2020nc";
+            if (value == "bt2020nc" || value == "bt709" || value == "bt470bg" || value == "smpte170m" ||
+                value == "fcc" || value == "smpte240m") return value;
             return "bt709";
         }
 
@@ -2570,6 +2925,7 @@ namespace PotPlayerFrameClip
         private readonly NativeMethods.LowLevelMouseProc mouseCallback;
         private readonly NativeMethods.WinEventDelegate eventCallback;
         private readonly Control dispatcher;
+        private readonly AppConfig config;
         private readonly CaptureEngine engine;
         private readonly System.Windows.Forms.Timer installRepairTimer;
         private readonly Dictionary<uint, NativeMethods.RECT> actionRects = new Dictionary<uint, NativeMethods.RECT>();
@@ -2595,6 +2951,7 @@ namespace PotPlayerFrameClip
 
         internal MenuBridgeContext(AppConfig config)
         {
+            this.config = config;
             dispatcher = new Control();
             dispatcher.CreateControl();
             engine = new CaptureEngine(config, dispatcher);
@@ -2614,7 +2971,8 @@ namespace PotPlayerFrameClip
             foregroundEventHook = NativeMethods.SetWinEventHook(NativeMethods.EVENT_SYSTEM_FOREGROUND, NativeMethods.EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, eventCallback, 0, 0, NativeMethods.WINEVENT_OUTOFCONTEXT);
 
             if (mouseHook == IntPtr.Zero || popupEventHook == IntPtr.Zero)
-                throw new InvalidOperationException("无法建立 PotPlayer 菜单扩展钩子。");
+                throw new InvalidOperationException(UiText.Choose(config.Language,
+                    "无法建立 PotPlayer 菜单扩展钩子。", "Unable to initialize the PotPlayer menu extension hook."));
         }
 
         internal CaptureEngine Engine
@@ -2770,17 +3128,17 @@ namespace PotPlayerFrameClip
 
             IntPtr submenu = NativeMethods.CreatePopupMenu();
             if (submenu == IntPtr.Zero) return;
-            AppendItem(submenu, CaptureCommandId, "截取当前帧（自动识别色彩 · 16-bit）");
+            AppendItem(submenu, CaptureCommandId, UiText.ActionLabel(config.Language, CaptureAction.CaptureFrame));
             NativeMethods.AppendMenu(submenu, NativeMethods.MF_SEPARATOR, UIntPtr.Zero, null);
-            AppendItem(submenu, MarkInCommandId, "设置入点");
-            AppendItem(submenu, MarkOutCommandId, "设置出点");
-            AppendItem(submenu, ExportOriginalCommandId, "导出原码片段（保留源色彩/DV + 原音频）");
-            AppendItem(submenu, ExportPreciseCommandId, "导出精确片段（可选编码 + PCM）");
+            AppendItem(submenu, MarkInCommandId, UiText.ActionLabel(config.Language, CaptureAction.MarkIn));
+            AppendItem(submenu, MarkOutCommandId, UiText.ActionLabel(config.Language, CaptureAction.MarkOut));
+            AppendItem(submenu, ExportOriginalCommandId, UiText.ActionLabel(config.Language, CaptureAction.ExportOriginal));
+            AppendItem(submenu, ExportPreciseCommandId, UiText.ActionLabel(config.Language, CaptureAction.ExportPrecise));
             NativeMethods.AppendMenu(submenu, NativeMethods.MF_SEPARATOR, UIntPtr.Zero, null);
-            AppendItem(submenu, ClearCommandId, "清除入点和出点");
-            AppendItem(submenu, SettingsCommandId, "设置…");
-            AppendItem(submenu, OpenImageCommandId, "打开当前作品图片文件夹");
-            AppendItem(submenu, OpenVideoCommandId, "打开当前作品视频文件夹");
+            AppendItem(submenu, ClearCommandId, UiText.ActionLabel(config.Language, CaptureAction.ClearRange));
+            AppendItem(submenu, SettingsCommandId, UiText.ActionLabel(config.Language, CaptureAction.Settings));
+            AppendItem(submenu, OpenImageCommandId, UiText.ActionLabel(config.Language, CaptureAction.OpenImageOutput));
+            AppendItem(submenu, OpenVideoCommandId, UiText.ActionLabel(config.Language, CaptureAction.OpenVideoOutput));
 
             NativeMethods.MENUITEMINFO rootItem = new NativeMethods.MENUITEMINFO();
             rootItem.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MENUITEMINFO));
@@ -2788,7 +3146,7 @@ namespace PotPlayerFrameClip
             rootItem.fType = NativeMethods.MFT_STRING;
             rootItem.wID = RootCommandId;
             rootItem.hSubMenu = submenu;
-            rootItem.dwTypeData = AppPaths.MenuTitle;
+            rootItem.dwTypeData = UiText.MenuTitle(config.Language);
             rootItem.cch = (uint)rootItem.dwTypeData.Length;
 
             if (!NativeMethods.InsertMenuItem(rootMenu, 0, true, ref rootItem)) return;
@@ -2839,7 +3197,8 @@ namespace PotPlayerFrameClip
         {
             StringBuilder text = new StringBuilder(160);
             if (NativeMethods.GetMenuString(menu, 0, text, text.Capacity, NativeMethods.MF_BYPOSITION) <= 0) return false;
-            return text.ToString().StartsWith("截取当前帧", StringComparison.Ordinal);
+            CaptureAction action;
+            return UiText.TryMapActionLabel(text.ToString(), out action) && action == CaptureAction.CaptureFrame;
         }
 
         private bool CacheSkinActionWindow(IntPtr hwnd)
@@ -3166,18 +3525,7 @@ namespace PotPlayerFrameClip
 
         private bool TryMapSkinTitle(string title, out CaptureAction action)
         {
-            action = CaptureAction.CaptureFrame;
-            if (title.StartsWith("\u622a\u53d6\u5f53\u524d\u5e27", StringComparison.Ordinal)) action = CaptureAction.CaptureFrame;
-            else if (title.StartsWith("\u8bbe\u7f6e\u5165\u70b9", StringComparison.Ordinal)) action = CaptureAction.MarkIn;
-            else if (title.StartsWith("\u8bbe\u7f6e\u51fa\u70b9", StringComparison.Ordinal)) action = CaptureAction.MarkOut;
-            else if (title.StartsWith("\u5bfc\u51fa\u539f\u7801\u7247\u6bb5", StringComparison.Ordinal)) action = CaptureAction.ExportOriginal;
-            else if (title.StartsWith("\u5bfc\u51fa\u7cbe\u786e\u7247\u6bb5", StringComparison.Ordinal)) action = CaptureAction.ExportPrecise;
-            else if (title.StartsWith("\u6e05\u9664\u5165\u70b9\u548c\u51fa\u70b9", StringComparison.Ordinal)) action = CaptureAction.ClearRange;
-            else if (title.StartsWith("\u8bbe\u7f6e", StringComparison.Ordinal)) action = CaptureAction.Settings;
-            else if (title.StartsWith("\u6253\u5f00\u5f53\u524d\u4f5c\u54c1\u56fe\u7247\u6587\u4ef6\u5939", StringComparison.Ordinal) || title.StartsWith("\u6253\u5f00\u622a\u56fe\u6587\u4ef6\u5939", StringComparison.Ordinal)) action = CaptureAction.OpenImageOutput;
-            else if (title.StartsWith("\u6253\u5f00\u5f53\u524d\u4f5c\u54c1\u89c6\u9891\u6587\u4ef6\u5939", StringComparison.Ordinal) || title.StartsWith("\u6253\u5f00\u89c6\u9891\u6587\u4ef6\u5939", StringComparison.Ordinal)) action = CaptureAction.OpenVideoOutput;
-            else return false;
-            return true;
+            return UiText.TryMapActionLabel(title, out action);
         }
 
         private bool TryGetFrameClipSkinMenuTitle(IntPtr hwnd, out string titleText)
@@ -3291,11 +3639,17 @@ namespace PotPlayerFrameClip
 
         private static int RunOneShot(AppConfig config, string[] args)
         {
+            string requestedAction = args[0].Trim().ToLowerInvariant();
+            if (requestedAction == "--apply-menu-language" && args.Length > 2)
+            {
+                try { return MenuLocalization.ApplyToFile(args[2], args[1]) ? 0 : 1; }
+                catch { return 1; }
+            }
             using (Form dispatcherForm = new Form())
             {
                 dispatcherForm.CreateControl();
                 CaptureEngine engine = new CaptureEngine(config, dispatcherForm);
-                string action = args[0].Trim().ToLowerInvariant();
+                string action = requestedAction;
                 if (action == "--seek" && args.Length > 1)
                 {
                     long milliseconds;

@@ -27,6 +27,7 @@ $menuName = 'FrameClipMenu.xml'
 $legacyRunName = 'PotPlayer' + ([char]0x52) + 'esolveCapture'
 $legacyMenuName = ([char]0x52) + 'esolveCaptureMenu.xml'
 $frameClipMenuTitle = [char]0x53C2 + [char]0x7167 + [char]0x5E27 + [char]0x4E0E + [char]0x7247 + [char]0x6BB5 + [char]0x622A + [char]0x53D6
+$frameClipEnglishTitle = 'Reference Frame & Clip Capture'
 $previousFrameClipMenuTitle = [char]0x5E27 + [char]0x4E0E + [char]0x7247 + [char]0x6BB5
 
 function Get-PotPlayerDirectory {
@@ -284,12 +285,60 @@ function Get-MenuConfiguration {
     return [pscustomobject]@{ Mode='Registry'; Path=$existing; Previous=$previous; PreviousExists=$previousExists }
 }
 
+function Set-FrameClipMenuLanguage {
+    param([xml]$Document, [string]$Language)
+
+    $submenu = @($Document.Menu.SubMenu)[0]
+    if (-not $submenu) { throw 'FrameClip menu template is missing its submenu.' }
+    $english = $Language -eq 'en-US'
+    $submenu.SetAttribute('Name', $(if ($english) { $frameClipEnglishTitle } else { $frameClipMenuTitle }))
+    $names = if ($english) {
+        @(
+            'Capture current frame (automatic color detection · 16-bit)',
+            'Set in point',
+            'Set out point',
+            'Export source clip (source color/DV + original audio)',
+            'Export precise clip (selectable codec + PCM)',
+            'Clear in and out points',
+            'Settings…',
+            'Open current title image folder',
+            'Open current title video folder'
+        )
+    } else {
+        @(
+            '截取当前帧（自动识别色彩 · 16-bit）',
+            '设置入点',
+            '设置出点',
+            '导出原码片段（保留源色彩/DV + 原音频）',
+            '导出精确片段（可选编码 + PCM）',
+            '清除入点和出点',
+            '设置…',
+            '打开当前作品图片文件夹',
+            '打开当前作品视频文件夹'
+        )
+    }
+    $commands = @($submenu.MenuItem | Where-Object { $_.CmdID })
+    if ($commands.Count -ne $names.Count) { throw 'FrameClip menu command count is invalid.' }
+    for ($index = 0; $index -lt $names.Count; $index++) { $commands[$index].SetAttribute('Name', $names[$index]) }
+}
+
+function Save-XmlDocument {
+    param([xml]$Document, [string]$Destination)
+    $settings = [Xml.XmlWriterSettings]::new()
+    $settings.Encoding = [Text.UTF8Encoding]::new($false)
+    $settings.Indent = $true
+    $writer = [Xml.XmlWriter]::Create($Destination, $settings)
+    try { $Document.Save($writer) } finally { $writer.Dispose() }
+}
+
 function Install-Menu {
-    param([string]$PlayerDirectory, [string]$PreviousMenuName)
+    param([string]$PlayerDirectory, [string]$PreviousMenuName, [string]$Language)
     $menusDirectory = Join-Path $PlayerDirectory 'Menus'
     New-Item -ItemType Directory -Force -Path $menusDirectory | Out-Null
     $destination = Join-Path $menusDirectory $menuName
     $baseMenu = if ($PreviousMenuName) { Join-Path $menusDirectory $PreviousMenuName } else { $null }
+    [xml]$template = [IO.File]::ReadAllText($sourceMenu)
+    Set-FrameClipMenuLanguage $template $Language
 
     if ($baseMenu -and (Test-Path -LiteralPath $baseMenu) -and $PreviousMenuName -ne $legacyMenuName) {
         $targetText = [IO.File]::ReadAllText($baseMenu)
@@ -297,19 +346,14 @@ function Install-Menu {
             $targetText = '<?xml' + $targetText.Substring(5)
         }
         [xml]$target = $targetText
-        [xml]$template = [IO.File]::ReadAllText($sourceMenu)
-        foreach ($node in @($target.Menu.SubMenu | Where-Object { $_.Name -eq $frameClipMenuTitle -or $_.Name -eq $previousFrameClipMenuTitle })) {
+        foreach ($node in @($target.Menu.SubMenu | Where-Object { $_.Name -eq $frameClipMenuTitle -or $_.Name -eq $frameClipEnglishTitle -or $_.Name -eq $previousFrameClipMenuTitle })) {
             [void]$target.Menu.RemoveChild($node)
         }
         $imported = $target.ImportNode($template.Menu.SubMenu, $true)
         [void]$target.Menu.InsertBefore($imported, $target.Menu.FirstChild)
-        $settings = [Xml.XmlWriterSettings]::new()
-        $settings.Encoding = [Text.UTF8Encoding]::new($false)
-        $settings.Indent = $true
-        $writer = [Xml.XmlWriter]::Create($destination, $settings)
-        try { $target.Save($writer) } finally { $writer.Dispose() }
+        Save-XmlDocument $target $destination
     } else {
-        Copy-Item -LiteralPath $sourceMenu -Destination $destination -Force
+        Save-XmlDocument $template $destination
     }
     return $destination
 }
@@ -319,6 +363,16 @@ if (-not (Test-Path -LiteralPath $sourceExe) -or -not (Test-Path -LiteralPath $s
 }
 
 $playerDirectory = Get-PotPlayerDirectory $PotPlayerDirectory
+$configPath = Join-Path $dataDirectory 'FrameClip.ini'
+$menuLanguage = 'zh-CN'
+if (Test-Path -LiteralPath $configPath) {
+    foreach ($line in Get-Content -LiteralPath $configPath -Encoding UTF8) {
+        if ($line.StartsWith('Language=', [StringComparison]::OrdinalIgnoreCase)) {
+            if ($line.Substring(9).Trim() -eq 'en-US') { $menuLanguage = 'en-US' }
+            break
+        }
+    }
+}
 $menusDirectory = Join-Path $playerDirectory 'Menus'
 $menuConfiguration = Get-MenuConfiguration $playerDirectory
 $menuConfigDirectory = if ($menuConfiguration.Mode -eq 'Ini') { Split-Path -Parent $menuConfiguration.Path } else { $null }
@@ -341,7 +395,7 @@ if ($selectedMenuName -eq $menuName -and (Test-Path -LiteralPath $statePath)) {
 }
 if ($originalPreviousMenuName -eq $legacyMenuName) { $originalPreviousMenuName = '' }
 $menuBaseName = if ($selectedMenuName -eq $menuName -and $originalPreviousMenuName) { $originalPreviousMenuName } else { $selectedMenuName }
-$menuPath = Install-Menu $playerDirectory $menuBaseName
+$menuPath = Install-Menu $playerDirectory $menuBaseName $menuLanguage
 
 New-Item -ItemType Directory -Force -Path $installDirectory | Out-Null
 New-Item -ItemType Directory -Force -Path $dataDirectory | Out-Null
@@ -363,23 +417,25 @@ if (Test-Path -LiteralPath $legacyMenuPath) {
     Remove-Item -LiteralPath $legacyMenuPath -Force
 }
 
+$existingLines = if (Test-Path -LiteralPath $configPath) { Get-Content -LiteralPath $configPath -Encoding UTF8 } else { @() }
+$values = [ordered]@{}
+foreach ($line in $existingLines) {
+    $split = $line.IndexOf('=')
+    if ($split -gt 0) { $values[$line.Substring(0,$split)] = $line.Substring($split+1) }
+}
+if (-not $values.Contains('LibraryRootDirectory')) { $values.LibraryRootDirectory = Join-Path ([Environment]::GetFolderPath('MyVideos')) 'FrameClip' }
+if (-not $values.Contains('ImageFormat')) { $values.ImageFormat = 'png16' }
+if (-not $values.Contains('VideoPreset')) { $values.VideoPreset = 'prores422hq' }
+if (-not $values.Contains('ExportRec709ForHdr')) { $values.ExportRec709ForHdr = 'False' }
+if (-not $values.Contains('Language')) { $values.Language = 'zh-CN' }
+$values.PotPlayerMenuPath = $menuPath
 if ($FFmpegPath) {
     if (-not (Test-Path -LiteralPath $FFmpegPath)) { throw "FFmpeg was not found at $FFmpegPath" }
     $probe = Join-Path (Split-Path -Parent $FFmpegPath) 'ffprobe.exe'
-    $configPath = Join-Path $dataDirectory 'FrameClip.ini'
-    $existingLines = if (Test-Path -LiteralPath $configPath) { Get-Content -LiteralPath $configPath -Encoding UTF8 } else { @() }
-    $values = [ordered]@{}
-    foreach ($line in $existingLines) {
-        $split = $line.IndexOf('=')
-        if ($split -gt 0) { $values[$line.Substring(0,$split)] = $line.Substring($split+1) }
-    }
-    if (-not $values.Contains('LibraryRootDirectory')) { $values.LibraryRootDirectory = Join-Path ([Environment]::GetFolderPath('MyVideos')) 'FrameClip' }
-    if (-not $values.Contains('ImageFormat')) { $values.ImageFormat = 'png16' }
-    if (-not $values.Contains('VideoPreset')) { $values.VideoPreset = 'prores422hq' }
     $values.FFmpeg = [IO.Path]::GetFullPath($FFmpegPath)
     $values.FFprobe = if (Test-Path -LiteralPath $probe) { [IO.Path]::GetFullPath($probe) } else { $probe }
-    [IO.File]::WriteAllLines($configPath, @($values.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }), [Text.UTF8Encoding]::new($false))
 }
+[IO.File]::WriteAllLines($configPath, @($values.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }), [Text.UTF8Encoding]::new($false))
 
 if ($menuConfiguration.Mode -eq 'Ini') {
     Copy-Item -LiteralPath $menuConfiguration.Path -Destination ($menuConfiguration.Path + '.frameclip-backup-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))

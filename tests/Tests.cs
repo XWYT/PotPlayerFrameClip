@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization;
 
@@ -26,6 +27,26 @@ namespace PotPlayerFrameClip
                 "Default output directory is invalid.");
             Check(CaptureFormats.NormalizeImageFormat("TIFF16") == "tiff16", "TIFF normalization failed.");
             Check(CaptureFormats.NormalizeVideoPreset("prores4444xq") == "prores4444xq", "Video preset normalization failed.");
+            Check(UiText.NormalizeLanguage("English") == UiText.English, "English language normalization failed.");
+            Check(UiText.NormalizeLanguage("unknown") == UiText.Chinese, "Unknown languages must fall back to Simplified Chinese.");
+            Check(UiText.ActionLabel(UiText.English, CaptureAction.CaptureFrame).StartsWith("Capture current frame", StringComparison.Ordinal),
+                "English menu labels are unavailable.");
+            AppConfig defaults = new AppConfig();
+            Check(!defaults.ExportRec709ForHdr, "HDR Rec.709 companion output must be disabled by default.");
+            Check(defaults.Language == UiText.Chinese, "Simplified Chinese must remain the default language.");
+
+            VideoInfo pqInfo = new VideoInfo
+            {
+                ColorRange = "tv",
+                ColorPrimaries = "bt2020",
+                ColorTransfer = "smpte2084",
+                ColorSpace = "bt2020nc"
+            };
+            string toneMapFilter = CaptureEngine.BuildRec709ToneMapFilter(pqInfo, "rgb48be");
+            Check(toneMapFilter.Contains("t=linear") && toneMapFilter.Contains("format=gbrpf32le") && toneMapFilter.Contains("tonemap=mobius"),
+                "HDR tone mapping must operate in linear floating-point RGB.");
+            Check(toneMapFilter.Contains("p=bt709:t=bt709:m=gbr:r=full") && toneMapFilter.Contains("color_primaries=bt709"),
+                "HDR tone mapping output is not tagged as full-range Rec.709 RGB.");
             Check(MediaOrganizer.DeriveWorkTitle("For.All.Mankind.S05E04.2160p.ATVP.WEB-DL.mkv", "") == "For All Mankind",
                 "Series title normalization failed.");
             Check(MediaOrganizer.DeriveClassificationTitle(@"D:\Media\For All Mankind\S01 4K.HDR\02.mkv", "", false) == "For All Mankind",
@@ -61,6 +82,12 @@ namespace PotPlayerFrameClip
                 "导出原码片段（保留源色彩/DV + 原音频）", "导出精确片段（可选编码 + PCM）",
                 "清除入点和出点", "设置…", "打开当前作品图片文件夹", "打开当前作品视频文件夹"
             };
+            string[] englishTitles = new[]
+            {
+                "Capture current frame (automatic color detection · 16-bit)", "Set in point", "Set out point",
+                "Export source clip (source color/DV + original audio)", "Export precise clip (selectable codec + PCM)",
+                "Clear in and out points", "Settings…", "Open current title image folder", "Open current title video folder"
+            };
             for (int index = 0; index < expectedActions.Length; index++)
             {
                 object[] rowArguments = new object[] { rowCenters[index], 226, CaptureAction.CaptureFrame };
@@ -70,6 +97,10 @@ namespace PotPlayerFrameClip
                 object[] titleArguments = new object[] { titles[index], CaptureAction.CaptureFrame };
                 bool titleMapped = titleMapper != null && (bool)titleMapper.Invoke(menuContext, titleArguments);
                 Check(titleMapped && (CaptureAction)titleArguments[1] == expectedActions[index], "Menu title mapping failed at index " + index + ".");
+
+                object[] englishArguments = new object[] { englishTitles[index], CaptureAction.CaptureFrame };
+                bool englishMapped = titleMapper != null && (bool)titleMapper.Invoke(menuContext, englishArguments);
+                Check(englishMapped && (CaptureAction)englishArguments[1] == expectedActions[index], "English menu title mapping failed at index " + index + ".");
             }
 
             string temporary = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".exe");
@@ -108,6 +139,31 @@ namespace PotPlayerFrameClip
                     "Pending menu repair changed the UTF-8 BOM policy.");
                 Check(File.ReadAllText(utf8Ini, new System.Text.UTF8Encoding(false)).Contains("LastMenuName=FrameClipMenu.xml"),
                     "Pending menu repair damaged a UTF-8 INI.");
+
+                string menuPath = Path.Combine(mediaDirectory, "FrameClipMenu.xml");
+                File.WriteAllText(menuPath,
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?><Menu><SubMenu Name=\"参照帧与片段截取\">" +
+                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"截取当前帧（自动识别色彩 · 16-bit）\"/><MenuItem CmdID=\"\"/>" +
+                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"设置入点\"/><MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"设置出点\"/>" +
+                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"导出原码片段（保留源色彩/DV + 原音频）\"/>" +
+                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"导出精确片段（可选编码 + PCM）\"/><MenuItem CmdID=\"\"/>" +
+                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"清除入点和出点\"/><MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"设置…\"/>" +
+                    "<MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"打开当前作品图片文件夹\"/><MenuItem CmdID=\"ID_PLAY_PAUSE\" Name=\"打开当前作品视频文件夹\"/>" +
+                    "</SubMenu><SubMenu Name=\"User menu\"><MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"About\"/></SubMenu></Menu>",
+                    new System.Text.UTF8Encoding(false));
+                Check(MenuLocalization.ApplyToFile(menuPath, UiText.English), "English menu localization failed.");
+                System.Xml.XmlDocument localizedMenu = new System.Xml.XmlDocument();
+                localizedMenu.Load(menuPath);
+                Check(localizedMenu.SelectSingleNode("/Menu/SubMenu[1]").Attributes["Name"].Value == "Reference Frame & Clip Capture",
+                    "English submenu title was not written.");
+                Check(localizedMenu.SelectSingleNode("/Menu/SubMenu[1]/MenuItem[@CmdID != ''][1]").Attributes["Name"].Value.StartsWith("Capture current frame", StringComparison.Ordinal),
+                    "English capture command was not written.");
+                Check(localizedMenu.SelectSingleNode("/Menu/SubMenu[2]").Attributes["Name"].Value == "User menu",
+                    "Menu localization modified an unrelated user menu.");
+                byte[] localizedBytes = File.ReadAllBytes(menuPath);
+                Check(MenuLocalization.ApplyToFile(menuPath, UiText.English), "Matching menu language should be accepted.");
+                Check(localizedBytes.SequenceEqual(File.ReadAllBytes(menuPath)),
+                    "Matching menu language should not rewrite the PotPlayer menu file.");
             }
             finally
             {

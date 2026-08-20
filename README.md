@@ -7,6 +7,7 @@
 ## 主要功能
 
 - 截取 16-bit RGB PNG 或 TIFF 静帧。
+- 可选为 PQ/HLG HDR 截帧同时生成一张标准 Rec.709 SDR 参照图；原 HDR 图仍完整保留，默认关闭。
 - PNG 写入可用的色域、传递函数与范围标签；文件名同时记录色彩解释信息。
 - 导出原码 MKV 片段，流复制视频、音频、字幕与容器元数据。
 - 导出精确 MOV 片段，可选 ProRes 422 HQ、ProRes 4444、ProRes 4444 XQ、DNxHR HQX、DNxHR 444，并使用 24-bit PCM 音频。
@@ -14,11 +15,14 @@
 - 文件、媒体元数据和上级目录都没有作品名时，使用带稳定来源标识的“待归类”目录，避免把纯集数误判成片名。
 - 支持 32 位、64 位 PotPlayer，以及便携版目录。
 - 可指定输出根目录、图片格式、精确片段编码和 FFmpeg 路径。
+- 设置窗口和 PotPlayer 扩展菜单可切换简体中文或英语。
 - 保留安装前的 PotPlayer 自定义菜单；重复安装、升级和卸载均带恢复逻辑。
 
 ## 精度说明
 
-FrameClip 的图片转换仅完成 YCbCr 到 RGB 的矩阵与码值范围变换，不应用显示 LUT，也不把 PQ、HLG 自动压成 SDR。HDR 图片在普通图片查看器中可能显得暗淡或异常，这是查看器按错误传递函数显示造成的结果。导入后期软件后，应依据文件名和源元数据指定正确的输入色彩空间。
+FrameClip 的 HDR 原图转换仅完成 YCbCr 到 RGB 的矩阵与码值范围变换，不应用显示 LUT，也不改变 PQ/HLG 传递函数。HDR 图片在普通图片查看器中可能显得暗淡或异常，这是查看器按错误传递函数显示造成的结果。导入后期软件后，应依据文件名和源元数据指定正确的输入色彩空间。
+
+设置中的“截取 HDR 图片时同时生成 Rec.709 SDR 副本”只对 PQ 和 HLG 来源生效。副本先转换到线性浮点光，再使用 FFmpeg Mobius 色调映射输出全范围 16-bit Rec.709 RGB，文件名带有 `Rec709-SDR-TONEMAPPED`。该文件用于普通显示器、图片查看器和 SDR 参照，不替代原 HDR 图，也不是可逆的母版转换。
 
 Dolby Vision Profile 5 等缺少可靠 HDR10/HLG 兼容基础层的来源会被拒绝生成参照帧，防止输出偏色图片。Profile 7/8 等兼容来源输出可解码基础层；动态元数据不会烘焙进 PNG、TIFF、ProRes 或 DNxHR。需要保留完整源流时使用“导出原码片段”。
 
@@ -29,7 +33,7 @@ Dolby Vision Profile 5 等缺少可靠 HDR10/HLG 兼容基础层的来源会被�
 | 操作系统 | Windows 10 或 Windows 11，x64/x86 |
 | 播放器 | PotPlayer 32 位或 64 位；标准安装、便携版均可 |
 | 运行环境 | .NET Framework 4.6.2 或更高版本 |
-| 媒体工具 | `ffmpeg.exe` 与同目录下的 `ffprobe.exe` |
+| 媒体工具 | `ffmpeg.exe` 与同目录下的 `ffprobe.exe`；HDR 转 Rec.709 副本需要 `zscale` 和 `tonemap` 滤镜 |
 
 FrameClip 不捆绑 PotPlayer、FFmpeg 或 .NET Framework。程序运行期间不访问网络。
 
@@ -115,7 +119,7 @@ $setup=Get-ChildItem -LiteralPath . -Filter 'PotPlayerFrameClip-v*-Setup.exe' | 
 便携版 PotPlayer 与自定义 FFmpeg：
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.2.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 可选参数：
@@ -137,16 +141,19 @@ $p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.2.0-Setup.exe' -ArgumentList
 | 导出原码片段 | 快速流复制，保留源编码和可复制的音频、字幕；切点受关键帧限制 |
 | 导出精确片段 | 重新编码，切点更准确，输出 ProRes 或 DNxHR 与 PCM 音频 |
 | 清除入点和出点 | 删除当前记录的范围 |
-| 设置 | 修改输出位置、图片格式、片段编码和 FFmpeg 路径 |
+| 设置 | 修改输出位置、图片格式、片段编码、HDR 的 Rec.709 副本、菜单语言和 FFmpeg 路径 |
 | 打开当前作品图片/视频文件夹 | 目录不存在时先创建，再由资源管理器打开 |
 
 若输出进入 `待归类剧集 [xxxxxxxx]` 或 `待归类作品 [xxxxxxxx]`，说明源文件只提供了 `01.mkv`、`02.mkv` 等弱名称，媒体元数据与上级目录也没有可验证的作品名。此时程序会保持同一来源目录的素材集中，并避免与其他未知作品合并。
+
+语言在设置中切换。保存后，FrameClip 自身菜单立即使用新语言；PotPlayer 已经载入的 XML 菜单需要关闭并重新打开 PotPlayer 才会刷新。菜单文件位于受保护目录时，Windows 可能弹出一次管理员确认。
 
 ## 导入后期软件
 
 - `Rec709-*`：按文件名标出的传递函数解释；常见来源为 Rec.709/BT.1886 类显示链路。
 - `Rec2100-PQ`：指定 Rec.2100 ST 2084/PQ 输入。
 - `Rec2100-HLG`：指定 Rec.2100 HLG 输入。
+- `Rec709-SDR-TONEMAPPED`：已转换为全范围 16-bit Rec.709 SDR，可作为普通 SDR 参照图导入。
 - `DV-P*-Base-*`：仅含可解码基础层，未应用 Dolby Vision 动态映射。
 - PNG 优先用于需要读取色彩标签的流程。
 - TIFF 为 16-bit 无损 RGB，但不同软件对 TIFF 色彩标签的支持差异较大，建议按文件名手动指定输入色彩空间。
@@ -205,14 +212,24 @@ Get-Command ffmpeg,ffprobe -ErrorAction SilentlyContinue | Select-Object Name,So
 
 ### HDR 图片在图片查看器中发暗、发灰或色彩异常
 
-图片保留源传递函数，没有执行显示色调映射。普通查看器常把 PQ/HLG RGB 当作 sRGB 显示。请在支持色彩管理的后期软件中按文件名指定 Rec.2100 PQ、Rec.2100 HLG 或相应 SDR 输入空间。
+HDR 原图保留源传递函数，没有执行显示色调映射。普通查看器常把 PQ/HLG RGB 当作 sRGB 显示。请在支持色彩管理的后期软件中按文件名指定 Rec.2100 PQ 或 Rec.2100 HLG；也可以在设置中启用 Rec.709 SDR 副本，供普通查看器和 SDR 工程参照。
+
+### 已启用 Rec.709 副本，但没有生成第二张图片
+
+- 该选项只对检测为 PQ 或 HLG 的来源生效，SDR 截帧不会重复生成相同内容。
+- 运行 `ffmpeg -filters | Select-String 'zscale|tonemap'`，确认 FFmpeg 构建包含这两个滤镜。
+- 原 HDR 图生成成功而副本失败时，提示中会显示副本错误，详细信息记录在 `%LOCALAPPDATA%\PotPlayerFrameClip\logs`。
+
+### 切换语言后 PotPlayer 右键菜单没有变化
+
+保存设置后关闭并重新打开 PotPlayer。若曾取消 Windows 管理员确认，请再次保存设置并完成确认；程序会重新校验菜单语言。仍无变化时重新运行最新版安装器，以恢复菜单文件路径记录。
 
 ### Windows SmartScreen 阻止安装
 
 当前安装包没有商业代码签名。请从项目 Releases 下载，核对版本化文件名；发布者提供 SHA-256 时可运行：
 
 ```powershell
-Get-FileHash '.\PotPlayerFrameClip-v0.2.0-Setup.exe' -Algorithm SHA256
+Get-FileHash '.\PotPlayerFrameClip-v0.3.0-Setup.exe' -Algorithm SHA256
 ```
 
 ## 卸载
@@ -234,13 +251,13 @@ Get-FileHash '.\PotPlayerFrameClip-v0.2.0-Setup.exe' -Algorithm SHA256
 ```powershell
 winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.2.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.0
 ```
 
 构建会执行 C# 单元测试、菜单静态检查，以及隔离的安装、重复安装、卸载恢复测试。最终发布资产为：
 
 ```text
-dist\PotPlayerFrameClip-v0.2.0-Setup.exe
+dist\PotPlayerFrameClip-v0.3.0-Setup.exe
 ```
 
 `dist\release` 与 `dist\obj` 仅供本机构建暂存，GitHub Release 工作流只上传单个安装包。源码按仓库原目录发布。

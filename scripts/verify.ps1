@@ -24,9 +24,16 @@ Assert-True ($sourceText.Contains('TryHandleCachedSkinMenuClick(data.Point)') -a
 Assert-True ($sourceText.Contains('[RememberFiles]') -and $sourceText.Contains('ExtractPathFromIniValue')) 'PotPlayer media-history parsing is incomplete.'
 Assert-True ($sourceText.Contains('FindExistingWorkDirectory(root, derivedTitle, episodicSource)')) 'Derived and unclassified titles are not reused across captures.'
 Assert-True ($sourceText.Contains('ToastForm previousToast = activeToast;') -and $sourceText.Contains('previousToast.Dispose();')) 'Toast replacement still risks clearing the active field during FormClosed.'
+Assert-True ($sourceText.Contains('ExportRec709ForHdr') -and $sourceText.Contains('tonemap=mobius') -and $sourceText.Contains('format=gbrpf32le')) `
+    'Optional HDR to Rec.709 companion output is incomplete.'
+Assert-True ($sourceText.Contains('UiText.TryMapActionLabel') -and $sourceText.Contains('--apply-menu-language')) `
+    'Bilingual settings and PotPlayer menu synchronization are incomplete.'
 $installText = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'install.ps1'), [Text.Encoding]::UTF8)
 Assert-True ($installText.Contains('ShellExecute($installExe') -and -not $installText.Contains('Start-Process -FilePath $installExe')) `
     'The helper must be launched through Windows Shell so silent installation can return.'
+Assert-True ($installText.Contains("Contains('ExportRec709ForHdr')") -and $installText.Contains("ExportRec709ForHdr = 'False'") -and `
+    $installText.Contains("Language = 'zh-CN'") -and $installText.Contains('PotPlayerMenuPath')) `
+    'Installer defaults for the new capture and localization settings are incomplete.'
 
 [xml]$menu = Get-Content -LiteralPath $menuPath -Raw -Encoding UTF8
 $submenu = $menu.Menu.SubMenu | Select-Object -First 1
@@ -53,7 +60,7 @@ try {
     & $compiler /nologo /target:exe /platform:anycpu /optimize+ /codepage:65001 `
         /main:PotPlayerFrameClip.Tests /out:$testExe `
         /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll `
-        /reference:System.Windows.Forms.dll /reference:System.Management.dll /reference:Microsoft.CSharp.dll `
+        /reference:System.Windows.Forms.dll /reference:System.Management.dll /reference:System.Xml.dll /reference:Microsoft.CSharp.dll `
         $source (Join-Path $projectRoot 'tests\Tests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed.' }
     & $testExe

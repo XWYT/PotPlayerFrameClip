@@ -5,10 +5,12 @@ PotPlayer FrameClip adds a **Reference Frame & Clip Capture** submenu to PotPlay
 ## Highlights
 
 - 16-bit RGB PNG or TIFF stills.
+- Optional 16-bit Rec.709 SDR companion image for PQ/HLG captures while retaining the original HDR still; disabled by default.
 - Source-copy MKV clips with video, optional audio, subtitles, chapters, and metadata.
 - Accurate ProRes or DNxHR clips with 24-bit PCM audio.
 - Automatic per-title `Images` and `Videos` organization with release-name matching.
-- SDR, HDR10/PQ, and HLG source labeling without automatic tone mapping.
+- SDR, HDR10/PQ, and HLG source labeling, with opt-in HDR-to-SDR tone mapping.
+- Simplified Chinese and English settings and PotPlayer extension menus.
 - 32-bit and 64-bit PotPlayer support, including portable installations.
 - Single-file per-user installer; FFmpeg remains an external dependency.
 
@@ -46,12 +48,16 @@ Download `PotPlayerFrameClip-v<version>-Setup.exe` from GitHub Releases and run 
 Silent installation:
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.2.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 ## Color handling
 
-FrameClip converts source YCbCr values to 16-bit RGB while retaining the encoded transfer characteristic. It does not display-render or tone-map PQ/HLG to SDR. Assign the input color space in the destination application using the filename and source metadata. TIFF tag support varies by application; manual input assignment is recommended.
+FrameClip converts the source YCbCr values of the original still to 16-bit RGB while retaining the encoded transfer characteristic. Assign that file's input color space in the destination application using the filename and source metadata. TIFF tag support varies by application; manual input assignment is recommended.
+
+When **Create a tone-mapped Rec.709 SDR copy for HDR captures** is enabled, PQ and HLG captures also produce a file marked `Rec709-SDR-TONEMAPPED`. The copy is processed in linear floating point with FFmpeg's Mobius tone mapper and encoded as full-range 16-bit Rec.709 RGB. It is a convenient SDR reference, not a reversible mastering transform, and the original HDR still remains unchanged. This option requires FFmpeg builds with the `zscale` and `tonemap` filters.
+
+The language selector updates the FrameClip settings and extension menus. Restart PotPlayer after saving so its loaded XML menu refreshes. Windows may request administrator confirmation when the PotPlayer menu is installed in a protected directory.
 
 Dolby Vision sources without a reliable HDR10/HLG-compatible base layer are rejected for decoded reference output. Transcoded ProRes/DNxHR output does not retain Dolby Vision dynamic metadata. Use source-copy export when the original streams must be preserved.
 
@@ -59,7 +65,7 @@ Dolby Vision sources without a reliable HDR10/HLG-compatible base layer are reje
 
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.2.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.0
 ```
 
 The release workflow uploads one asset: `PotPlayerFrameClip-v<version>-Setup.exe`.
