@@ -35,6 +35,26 @@ namespace PotPlayerFrameClip
             Check(!defaults.ExportRec709ForHdr, "HDR Rec.709 companion output must be disabled by default.");
             Check(defaults.Language == UiText.Chinese, "Simplified Chinese must remain the default language.");
 
+            CaptureEngine processEngine = new CaptureEngine(defaults, null);
+            System.Diagnostics.Stopwatch pipeTimer = System.Diagnostics.Stopwatch.StartNew();
+            bool pipeFailureReturned = false;
+            try
+            {
+                processEngine.RunProcess(
+                    "cmd.exe",
+                    "/d /c \"for /L %i in (1,1,20000) do @echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx 1>&2 & exit /b 7\"",
+                    "stderr saturation probe",
+                    10000);
+            }
+            catch (InvalidOperationException)
+            {
+                pipeFailureReturned = true;
+            }
+            catch { }
+            pipeTimer.Stop();
+            Check(pipeFailureReturned && pipeTimer.ElapsedMilliseconds < 9000,
+                "External process stderr saturation caused a redirected-pipe deadlock.");
+
             using (ToastForm toast = new ToastForm("提示标题", "提示正文必须被完整绘制。", 2000, new Rectangle(0, 0, 1920, 1080)))
             using (Bitmap toastBitmap = new Bitmap(toast.Width, toast.Height))
             {

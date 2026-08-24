@@ -131,6 +131,46 @@ try {
     $restoredWithoutKey = [IO.File]::ReadAllText($iniPath, [Text.UTF8Encoding]::new($false))
     Assert-True (-not $restoredWithoutKey.Contains('LastMenuName=')) '卸载后遗留了安装前不存在的菜单键。'
 
+    # install-state.json 位于当前用户可写目录。卸载器必须先验证其中的路径和菜单内容，
+    # 再决定是否提权或删除文件，不能把状态文件变成任意文件删除入口。
+    $victimPath = Join-Path $testRoot 'unrelated-user-file.txt'
+    [IO.File]::WriteAllText($victimPath, 'must remain', [Text.UTF8Encoding]::new($false))
+    [ordered]@{
+        PlayerDirectory = $playerDirectory
+        MenuPath = $victimPath
+        MenuConfigMode = 'Ini'
+        MenuConfigPath = $iniPath
+        PreviousMenuName = ''
+        PreviousMenuValueExists = $false
+    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dataDirectory 'install-state.json') -Encoding UTF8
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installDirectory 'uninstall.ps1') `
+        -InstallDirectory $installDirectory -DataDirectory $dataDirectory -TestMode 2>$null
+    $maliciousPathExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+    Assert-True ($maliciousPathExitCode -ne 0) '卸载器接受了状态文件中的任意菜单路径。'
+    Assert-True (Test-Path -LiteralPath $victimPath) '卸载器删除了状态文件指向的无关文件。'
+
+    New-Item -ItemType Directory -Force -Path $menusDirectory | Out-Null
+    [IO.File]::WriteAllText($generatedMenu, '<Menu><SubMenu Name="用户菜单" /></Menu>', [Text.UTF8Encoding]::new($false))
+    [ordered]@{
+        PlayerDirectory = $playerDirectory
+        MenuPath = $generatedMenu
+        MenuConfigMode = 'Ini'
+        MenuConfigPath = $iniPath
+        PreviousMenuName = ''
+        PreviousMenuValueExists = $false
+    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dataDirectory 'install-state.json') -Encoding UTF8
+    $ErrorActionPreference = 'Continue'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installDirectory 'uninstall.ps1') `
+        -InstallDirectory $installDirectory -DataDirectory $dataDirectory -TestMode 2>$null
+    $invalidMenuExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+    Assert-True ($invalidMenuExitCode -ne 0) '卸载器接受了不包含 FrameClip 节点的菜单文件。'
+    Assert-True (Test-Path -LiteralPath $generatedMenu) '卸载器删除了未通过内容验证的菜单文件。'
+
+    $global:LASTEXITCODE = 0
     Write-Host 'Installation regression tests passed.'
 }
 finally {

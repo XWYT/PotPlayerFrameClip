@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$Version = '0.3.2',
+    [string]$Version = '0.3.3',
     [switch]$SkipTests,
     [switch]$SkipInstaller
 )
@@ -86,7 +86,7 @@ if ($LASTEXITCODE -ne 0) { throw '32-bit native bridge compilation failed.' }
 if ($LASTEXITCODE -ne 0) { throw '32-bit bridge host compilation failed.' }
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    throw 'Version must use the form major.minor.patch, for example 0.3.2.'
+    throw 'Version must use the form major.minor.patch, for example 0.3.3.'
 }
 $assemblyVersion = $Version + '.0'
 $generatedSource = Join-Path $obj 'PotPlayerFrameClip.generated.cs'

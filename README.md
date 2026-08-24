@@ -120,7 +120,7 @@ $setup=Get-ChildItem -LiteralPath . -Filter 'PotPlayerFrameClip-v*-Setup.exe' | 
 便携版 PotPlayer 与自定义 FFmpeg：
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.2-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.3-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 可选参数：
@@ -202,7 +202,7 @@ Get-Item "$env:LOCALAPPDATA\PotPlayerFrameClip\FrameClipBridge64.dll",
 
 ### 设置窗口无法打开，或菜单动作明显错位
 
-`0.3.1` 使用外部窗口和菜单几何推断，可能误接管普通 PotPlayer 菜单。`0.3.2` 已移除该路径，皮肤菜单由 PotPlayer 进程内的原生桥接分发。先确认版本为 `0.3.2.0` 或更高。
+`0.3.1` 使用外部窗口和菜单几何推断，可能误接管普通 PotPlayer 菜单。`0.3.2` 已移除该路径，皮肤菜单由 PotPlayer 进程内的原生桥接分发；`0.3.3` 进一步限制桥接只拦截 FrameClip 占位命令，普通 PotPlayer 子菜单命令会继续交还播放器处理。先确认版本为 `0.3.3.0` 或更高。
 
 只重启 FrameClip 常驻程序，不需要结束 PotPlayer：
 
@@ -246,7 +246,7 @@ HDR 原图保留源传递函数，没有执行显示色调映射。普通查看�
 当前安装包没有商业代码签名。请从项目 Releases 下载，核对版本化文件名；发布者提供 SHA-256 时可运行：
 
 ```powershell
-Get-FileHash '.\PotPlayerFrameClip-v0.3.2-Setup.exe' -Algorithm SHA256
+Get-FileHash '.\PotPlayerFrameClip-v0.3.3-Setup.exe' -Algorithm SHA256
 ```
 
 ## 卸载
@@ -269,13 +269,13 @@ Get-FileHash '.\PotPlayerFrameClip-v0.3.2-Setup.exe' -Algorithm SHA256
 winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.2
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.3
 ```
 
 构建会执行 C# 单元测试、菜单静态检查，以及隔离的安装、重复安装、卸载恢复测试。最终发布资产为：
 
 ```text
-dist\PotPlayerFrameClip-v0.3.2-Setup.exe
+dist\PotPlayerFrameClip-v0.3.3-Setup.exe
 ```
 
 `dist\release` 与 `dist\obj` 仅供本机构建暂存，GitHub Release 工作流只上传单个安装包。源码按仓库原目录发布。

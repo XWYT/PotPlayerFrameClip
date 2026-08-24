@@ -29,6 +29,7 @@ static int g_pending_action = -1;
 static const UINT_PTR FRAMECLIP_SUBCLASS_ID = 0x46434C50u;
 static const DWORD MENU_SESSION_MS = 10000;
 static const DWORD COMMAND_WINDOW_MS = 1000;
+static const UINT FRAMECLIP_PLACEHOLDER_COMMAND = 0xE140u; /* ID_APP_ABOUT */
 static const UINT FRAMECLIP_ACTION_MESSAGE = WM_APP + 0x4C0;
 static const wchar_t *FRAMECLIP_MESSAGE_WINDOW = L"PotPlayerFrameClip.NativeBridge";
 
@@ -208,10 +209,22 @@ static LRESULT CALLBACK FrameClipSubclassProc(
     (void)subclass_id;
     (void)reference_data;
 
-    if (message == WM_COMMAND && g_pending_action >= 0 && TickIsCurrent(now, g_pending_until)) {
+    if (message == WM_COMMAND && g_pending_action >= 0) {
         int action = g_pending_action;
+        BOOL current = TickIsCurrent(now, g_pending_until);
         g_pending_action = -1;
         g_pending_until = 0;
+
+        /*
+         * 自绘菜单窗口没有稳定的类名或可访问标题，其他 PotPlayer 二级菜单也可能
+         * 短暂成为候选窗口。只有 FrameClip XML 使用的安全占位命令到达时才吞掉
+         * WM_COMMAND；其他命令必须原样交还播放器。
+         */
+        if (!current || HIWORD(w_param) != 0 || LOWORD(w_param) != FRAMECLIP_PLACEHOLDER_COMMAND || l_param != 0) {
+            WriteBridgeLog(L"ignored-command", LOWORD(w_param));
+            return DefSubclassProc(window, message, w_param, l_param);
+        }
+
         PostMessageW(window, WM_CANCELMODE, 0, 0);
         WriteBridgeLog(L"intercept-command", LOWORD(w_param));
         LaunchFrameClipAction(action);

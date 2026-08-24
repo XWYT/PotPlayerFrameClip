@@ -20,8 +20,8 @@ using System.Xml;
 [assembly: AssemblyDescription("Frame and source clip capture extension for PotPlayer")]
 [assembly: AssemblyProduct("PotPlayer FrameClip")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 PotPlayer FrameClip contributors")]
-[assembly: AssemblyVersion("0.3.2.0")]
-[assembly: AssemblyFileVersion("0.3.2.0")]
+[assembly: AssemblyVersion("0.3.3.0")]
+[assembly: AssemblyFileVersion("0.3.3.0")]
 
 namespace PotPlayerFrameClip
 {
@@ -2565,7 +2565,15 @@ namespace PotPlayerFrameClip
                 format.StartsWith("bgra", StringComparison.Ordinal);
         }
 
-        private string RunProcess(string executable, string arguments, string operation)
+        private static int GetProcessTimeoutMilliseconds(string operation)
+        {
+            string value = operation ?? String.Empty;
+            if (value.IndexOf("probe", StringComparison.OrdinalIgnoreCase) >= 0) return 2 * 60 * 1000;
+            if (value.IndexOf("frame", StringComparison.OrdinalIgnoreCase) >= 0) return 10 * 60 * 1000;
+            return 12 * 60 * 60 * 1000;
+        }
+
+        internal string RunProcess(string executable, string arguments, string operation, int timeoutMilliseconds = 0)
         {
             ProcessStartInfo start = new ProcessStartInfo();
             start.FileName = executable;
@@ -2579,9 +2587,23 @@ namespace PotPlayerFrameClip
 
             using (Process process = Process.Start(start))
             {
-                string stdout = process.StandardOutput.ReadToEnd();
-                string stderr = process.StandardError.ReadToEnd();
-                process.WaitForExit();
+                if (process == null) throw new InvalidOperationException(operation + T(" 无法启动。", " could not be started."));
+                Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+                Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+                int timeout = timeoutMilliseconds > 0 ? timeoutMilliseconds : GetProcessTimeoutMilliseconds(operation);
+                if (!process.WaitForExit(timeout))
+                {
+                    try { process.Kill(); }
+                    catch { }
+                    try { process.WaitForExit(5000); }
+                    catch { }
+                    try { Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000); }
+                    catch { }
+                    throw new TimeoutException(operation + T(" 超时，已终止外部进程。", " timed out and the external process was terminated."));
+                }
+                Task.WaitAll(stdoutTask, stderrTask);
+                string stdout = stdoutTask.Result;
+                string stderr = stderrTask.Result;
                 if (process.ExitCode != 0)
                     throw new InvalidOperationException(operation + T(" 失败：", " failed: ") + Shorten(stderr.Trim(), 240));
                 return stdout;

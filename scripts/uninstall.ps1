@@ -69,6 +69,96 @@ function Get-TextFileEncoding {
     }
 }
 
+function Get-ValidatedInstallState {
+    param($RawState)
+
+    if (-not $RawState) { return $null }
+
+    try {
+        $playerDirectory = [IO.Path]::GetFullPath([string]$RawState.PlayerDirectory)
+        $menuPath = [IO.Path]::GetFullPath([string]$RawState.MenuPath)
+    } catch {
+        throw 'FrameClip install state contains an invalid path. No PotPlayer files were changed.'
+    }
+
+    $playerExecutables = @('PotPlayerMini64.exe','PotPlayer64.exe','PotPlayerMini.exe','PotPlayer.exe')
+    $verifiedPlayerDirectory = [bool]($playerExecutables |
+        Where-Object { Test-Path -LiteralPath (Join-Path $playerDirectory $_) -PathType Leaf })
+
+    $expectedMenuPath = [IO.Path]::GetFullPath((Join-Path $playerDirectory 'Menus\FrameClipMenu.xml'))
+    if (-not $menuPath.Equals($expectedMenuPath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'FrameClip install state contains an unexpected menu path. No PotPlayer files were changed.'
+    }
+
+    $mode = [string]$RawState.MenuConfigMode
+    $configPath = [string]$RawState.MenuConfigPath
+    if ($mode -eq 'Ini') {
+        try { $configPath = [IO.Path]::GetFullPath($configPath) }
+        catch { throw 'FrameClip install state contains an invalid PotPlayer INI path. No PotPlayer files were changed.' }
+
+        $allowedIniPaths = @('PotPlayerMini64.ini','PotPlayer64.ini','PotPlayerMini.ini','PotPlayer.ini') |
+            ForEach-Object { [IO.Path]::GetFullPath((Join-Path $playerDirectory $_)) }
+        if (-not ($allowedIniPaths | Where-Object { $_.Equals($configPath, [StringComparison]::OrdinalIgnoreCase) })) {
+            throw 'FrameClip install state contains an unexpected PotPlayer INI path. No PotPlayer files were changed.'
+        }
+    } elseif ($mode -eq 'Registry') {
+        $allowedRegistryPaths = @(
+            'HKCU:\Software\DAUM\PotPlayerMini64\Settings',
+            'HKCU:\Software\DAUM\PotPlayer64\Settings',
+            'HKCU:\Software\DAUM\PotPlayerMini\Settings',
+            'HKCU:\Software\DAUM\PotPlayer\Settings'
+        )
+        if (-not ($allowedRegistryPaths | Where-Object { $_.Equals($configPath, [StringComparison]::OrdinalIgnoreCase) })) {
+            throw 'FrameClip install state contains an unexpected PotPlayer registry path. No PotPlayer files were changed.'
+        }
+    } else {
+        throw 'FrameClip install state contains an unsupported PotPlayer configuration mode. No PotPlayer files were changed.'
+    }
+
+    $recordedPlayerFileExists = (Test-Path -LiteralPath $menuPath -PathType Leaf) -or
+        ($mode -eq 'Ini' -and (Test-Path -LiteralPath $configPath -PathType Leaf))
+    if (-not $verifiedPlayerDirectory -and $recordedPlayerFileExists) {
+        throw 'FrameClip install state does not point to a verified PotPlayer directory. No PotPlayer files were changed.'
+    }
+
+    $previousMenuName = [string]$RawState.PreviousMenuName
+    if ($previousMenuName.Contains("`r") -or $previousMenuName.Contains("`n") -or
+        ($previousMenuName -and [IO.Path]::GetFileName($previousMenuName) -ne $previousMenuName)) {
+        throw 'FrameClip install state contains an invalid previous menu name. No PotPlayer files were changed.'
+    }
+
+    return [pscustomobject]@{
+        PlayerDirectory = $playerDirectory
+        MenuPath = $menuPath
+        MenuConfigMode = $mode
+        MenuConfigPath = $configPath
+        PreviousMenuName = $previousMenuName
+        PreviousMenuValueExists = if ($RawState.PSObject.Properties.Name -contains 'PreviousMenuValueExists') {
+            [bool]$RawState.PreviousMenuValueExists
+        } else {
+            $true
+        }
+    }
+}
+
+function Test-FrameClipMenuFile {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    try {
+        [xml]$document = [IO.File]::ReadAllText($Path)
+        $titles = @('参照帧与片段截取', 'Reference Frame & Clip Capture', '帧与片段')
+        foreach ($submenu in @($document.Menu.SubMenu)) {
+            if ($titles -notcontains [string]$submenu.Name) { continue }
+            $commands = @($submenu.MenuItem | Where-Object { $_.CmdID })
+            if ($commands.Count -eq 9 -and @($commands | Where-Object { $_.CmdID -ne 'ID_APP_ABOUT' }).Count -eq 0) {
+                return $true
+            }
+        }
+    } catch { }
+    return $false
+}
+
 function Restart-Elevated {
     $parts = @(
         '& ' + (Quote-PowerShellLiteral $scriptPath),
@@ -85,7 +175,10 @@ function Restart-Elevated {
 
 $state = $null
 if (Test-Path -LiteralPath $statePath) {
-    $state = Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $state = Get-ValidatedInstallState (Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json)
+    if ((Test-Path -LiteralPath $state.MenuPath) -and -not (Test-FrameClipMenuFile $state.MenuPath)) {
+        throw 'The recorded menu file is not a verified FrameClip menu. No PotPlayer settings were changed.'
+    }
     $menuDirectory = if ($state.MenuPath) { Split-Path -Parent $state.MenuPath } else { $null }
     $configDirectory = if ($state.MenuConfigMode -eq 'Ini' -and $state.MenuConfigPath) { Split-Path -Parent $state.MenuConfigPath } else { $null }
     $needsElevation = ($menuDirectory -and (Test-Path -LiteralPath $menuDirectory) -and -not (Test-DirectoryWritable $menuDirectory)) -or

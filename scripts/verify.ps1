@@ -24,6 +24,7 @@ function Get-PeMachine([string]$Path) {
 $sourceText = [IO.File]::ReadAllText($source, [Text.Encoding]::UTF8)
 $nativeSource = [IO.File]::ReadAllText((Join-Path $projectRoot 'native\frameclip_bridge.c'), [Text.Encoding]::UTF8)
 $installerText = [IO.File]::ReadAllText($installerPath, [Text.Encoding]::UTF8)
+$uninstallText = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'uninstall.ps1'), [Text.Encoding]::UTF8)
 $forbiddenBrand = 'Re' + 'solve'
 Assert-True (-not $sourceText.Contains($forbiddenBrand)) 'A legacy product-specific brand remains in source.'
 Assert-True (-not ($sourceText -match '[A-Za-z]:\\')) 'A fixed Windows drive path remains in source.'
@@ -48,6 +49,9 @@ Assert-True ($sourceText.Contains('ControlStyles.OptimizedDoubleBuffer') -and $s
     'Toast rendering still depends on child controls or a short-lived one-shot message loop.'
 Assert-True ($sourceText.Contains('ExportRec709ForHdr') -and $sourceText.Contains('tonemap=mobius') -and $sourceText.Contains('format=gbrpf32le')) `
     'Optional HDR to Rec.709 companion output is incomplete.'
+Assert-True ($sourceText.Contains('ReadToEndAsync()') -and $sourceText.Contains('WaitForExit(timeout)') -and `
+    $sourceText.Contains('Task.WaitAll(new Task[] { stdoutTask, stderrTask }') -and $sourceText.Contains('process.Kill()')) `
+    'External process output can still deadlock or run without a bounded timeout.'
 Assert-True ($sourceText.Contains('UiText.TryMapActionLabel') -and $sourceText.Contains('--apply-menu-language')) `
     'Bilingual settings and PotPlayer menu synchronization are incomplete.'
 $installText = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'install.ps1'), [Text.Encoding]::UTF8)
@@ -56,6 +60,10 @@ Assert-True ($installText.Contains('ShellExecute($installExe') -and -not $instal
 Assert-True ($installText.Contains("Contains('ExportRec709ForHdr')") -and $installText.Contains("ExportRec709ForHdr = 'False'") -and `
     $installText.Contains("Language = 'zh-CN'") -and $installText.Contains('PotPlayerMenuPath')) `
     'Installer defaults for the new capture and localization settings are incomplete.'
+Assert-True ($uninstallText.Contains('Get-ValidatedInstallState') -and $uninstallText.Contains('Test-FrameClipMenuFile') -and `
+    $uninstallText.Contains("Join-Path `$playerDirectory 'Menus\FrameClipMenu.xml'") -and `
+    $uninstallText.Contains('No PotPlayer files were changed.')) `
+    'Uninstaller state paths are not validated before restoration, elevation, or deletion.'
 
 [xml]$menu = Get-Content -LiteralPath $menuPath -Raw -Encoding UTF8
 $submenu = $menu.Menu.SubMenu | Select-Object -First 1
@@ -94,6 +102,10 @@ Assert-True ((Get-PeMachine $bridge32) -eq 0x014c) '32-bit native bridge has the
 Assert-True ((Get-PeMachine $bridgeHost32) -eq 0x014c) '32-bit bridge host has the wrong PE architecture.'
 Assert-True ($nativeSource.Contains('SetWindowSubclass') -and $nativeSource.Contains('WM_COMMAND') -and `
     $nativeSource.Contains('FrameClipMouseProc')) 'Native command interception is incomplete.'
+Assert-True ($nativeSource.Contains('FRAMECLIP_PLACEHOLDER_COMMAND') -and $nativeSource.Contains('HIWORD(w_param) != 0') -and `
+    $nativeSource.Contains('LOWORD(w_param) != FRAMECLIP_PLACEHOLDER_COMMAND') -and $nativeSource.Contains('l_param != 0') -and `
+    $nativeSource.Contains('ignored-command')) `
+    'Native menu interception can still consume commands from unrelated PotPlayer submenus.'
 Assert-True ($nativeSource.Contains('GET_MODULE_HANDLE_EX_FLAG_PIN') -and $installerText.Contains('if IsPotPlayerRunning() then')) `
     'The injected bridge can still unload beneath a live PotPlayer window subclass.'
 Assert-True (-not ($nativeSource -match '[A-Za-z]:\\')) 'A fixed Windows path remains in the native bridge.'
