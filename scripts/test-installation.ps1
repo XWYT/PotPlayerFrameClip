@@ -27,6 +27,9 @@ try {
     # 假播放器目录只参与路径和配置测试，不启动任何进程，也不会访问本机 PotPlayer。
     [IO.File]::WriteAllBytes((Join-Path $playerDirectory 'PotPlayerMini64.exe'), [byte[]](0x4D, 0x5A))
     [IO.File]::Copy($ExecutablePath, (Join-Path $stageDirectory 'PotPlayerFrameClip.exe'), $true)
+    foreach ($nativeFile in @('FrameClipBridge64.dll', 'FrameClipBridge32.dll', 'FrameClipBridgeHost32.exe')) {
+        [IO.File]::Copy((Join-Path (Split-Path -Parent $ExecutablePath) $nativeFile), (Join-Path $stageDirectory $nativeFile), $true)
+    }
     Copy-Item -LiteralPath (Join-Path $projectRoot 'app.config') -Destination (Join-Path $stageDirectory 'PotPlayerFrameClip.exe.config')
     Copy-Item -LiteralPath (Join-Path $projectRoot 'menu\FrameClipMenu.xml') -Destination (Join-Path $stageDirectory 'FrameClipMenu.xml')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install.ps1') -Destination $stageDirectory
@@ -58,6 +61,9 @@ try {
         '旧版菜单没有创建迁移备份。'
     Assert-True (Test-Path -LiteralPath (Join-Path $dataDirectory 'install-state.json')) '安装状态文件缺失。'
     Assert-True (Test-Path -LiteralPath (Join-Path $installDirectory 'PotPlayerFrameClip.exe')) '程序文件未安装。'
+    Assert-True (Test-Path -LiteralPath (Join-Path $installDirectory 'FrameClipBridge64.dll')) '64 位原生桥接未安装。'
+    Assert-True (Test-Path -LiteralPath (Join-Path $installDirectory 'FrameClipBridge32.dll')) '32 位原生桥接未安装。'
+    Assert-True (Test-Path -LiteralPath (Join-Path $installDirectory 'FrameClipBridgeHost32.exe')) '32 位桥接宿主未安装。'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $installDirectory 'install-state.json'))) '用户状态错误地写入了自定义程序目录。'
 
     [xml]$merged = [IO.File]::ReadAllText($generatedMenu)
@@ -66,7 +72,8 @@ try {
     Assert-True (@($merged.Menu.SubMenu | Where-Object { $_.Name -eq '用户菜单' }).Count -eq 1) '用户原有菜单没有保留。'
     $installedCommands = @($merged.Menu.SubMenu | Where-Object { $_.Name -eq $frameClipTitle } | ForEach-Object { $_.MenuItem | Where-Object { $_.CmdID } })
     Assert-True (@($installedCommands | Where-Object { $_.CmdID -eq 'ID_PLAY_PAUSE' }).Count -eq 0) 'FrameClip 菜单仍会退化成播放/暂停。'
-    Assert-True (@($installedCommands | Where-Object { $_.CmdID -ne 'CMD_POPUPMENU_ETC' }).Count -eq 0) 'FrameClip 菜单没有使用失效关闭占位命令。'
+    Assert-True (@($installedCommands | Where-Object { $_.CmdID -ne 'ID_APP_ABOUT' }).Count -eq 0) 'FrameClip 菜单没有使用无子菜单的安全占位命令。'
+    Assert-True (@($installedCommands | Where-Object { $_.CmdID -eq 'CMD_POPUPMENU_ETC' }).Count -eq 0) 'FrameClip 菜单仍会展开 PotPlayer 三级菜单。'
     $installedIni = [IO.File]::ReadAllText($iniPath, [Text.UTF8Encoding]::new($false))
     Assert-True ($installedIni.Contains('LastMenuName=FrameClipMenu.xml')) '安装后没有选择扩展菜单。'
     Assert-True ($installedIni.Contains('Language=简体中文')) '安装过程损坏了 UTF-8 INI 内容。'

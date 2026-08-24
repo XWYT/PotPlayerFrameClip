@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.3.1"
+  #define AppVersion "0.3.2"
 #endif
 
 #define AppName "PotPlayer FrameClip"
@@ -42,6 +42,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 Source: "..\dist\release\PotPlayerFrameClip.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\release\PotPlayerFrameClip.exe.config"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\release\FrameClipBridge64.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\release\FrameClipBridge32.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\release\FrameClipBridgeHost32.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\release\FrameClipMenu.xml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\release\install.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\release\uninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
@@ -73,8 +76,23 @@ end;
 function DetectPotPlayerDirectory(): String;
 var
   Candidate: String;
+  ExistingConfig: String;
+  ConfigLines: TArrayOfString;
+  Index: Integer;
 begin
   Result := '';
+  ExistingConfig := ExpandConstant('{localappdata}\PotPlayerFrameClip\FrameClip.ini');
+  if LoadStringsFromFile(ExistingConfig, ConfigLines) then begin
+    for Index := 0 to GetArrayLength(ConfigLines) - 1 do begin
+      if Pos('PotPlayerMenuPath=', ConfigLines[Index]) = 1 then begin
+        Candidate := ExtractFileDir(ExtractFileDir(Copy(ConfigLines[Index], Length('PotPlayerMenuPath=') + 1, MaxInt)));
+        if DirExists(Candidate) then begin
+          Result := Candidate;
+          Exit;
+        end;
+      end;
+    end;
+  end;
   if RegQueryStringValue(HKCU, 'Software\DAUM\PotPlayer64', 'ProgramPath', Candidate) and DirExists(Candidate) then
     Result := Candidate
   else if RegQueryStringValue(HKCU, 'Software\DAUM\PotPlayer', 'ProgramPath', Candidate) and DirExists(Candidate) then
@@ -96,7 +114,7 @@ begin
   if FileExists(Candidate) then
     Result := Candidate
   else begin
-    Candidate := ExpandConstant('{userprofile}\scoop\apps\ffmpeg\current\bin\ffmpeg.exe');
+    Candidate := ExpandConstant('{%USERPROFILE}\scoop\apps\ffmpeg\current\bin\ffmpeg.exe');
     if FileExists(Candidate) then Result := Candidate;
   end;
 end;
@@ -152,14 +170,8 @@ var
   ResultCode: Integer;
 begin
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -WindowStyle Hidden -Command "Get-Process PotPlayerFrameClip,PotPlayerResolveCapture -ErrorAction SilentlyContinue | Stop-Process -Force"',
+    '-NoProfile -WindowStyle Hidden -Command "Get-Process PotPlayerFrameClip,FrameClipBridgeHost32,PotPlayerResolveCapture -ErrorAction SilentlyContinue | Stop-Process -Force"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-end;
-
-function PrepareToInstall(var NeedsRestart: Boolean): String;
-begin
-  StopFrameClipHelpers();
-  Result := '';
 end;
 
 function IsPotPlayerRunning(): Boolean;
@@ -170,6 +182,16 @@ begin
     '-NoProfile -WindowStyle Hidden -Command "if (Get-Process PotPlayerMini64,PotPlayer64,PotPlayerMini,PotPlayer -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := ResultCode = 1;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  if IsPotPlayerRunning() then begin
+    Result := '请先关闭 PotPlayer，再继续安装或升级。FrameClip 原生菜单桥接会在播放器进程内保持加载，不能在播放期间安全替换。';
+    Exit;
+  end;
+  StopFrameClipHelpers();
+  Result := '';
 end;
 
 function InitializeUninstall(): Boolean;

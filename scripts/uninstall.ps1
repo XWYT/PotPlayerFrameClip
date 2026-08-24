@@ -133,7 +133,7 @@ if (-not $TestMode -and (Test-PotPlayerRunning)) {
 }
 
 if (-not $TestMode) {
-    Get-Process -Name 'PotPlayerFrameClip' -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process -Name 'PotPlayerFrameClip','FrameClipBridgeHost32' -ErrorAction SilentlyContinue | Stop-Process -Force
     Remove-ItemProperty -LiteralPath $runKey -Name $appName -ErrorAction SilentlyContinue
     Remove-ItemProperty -LiteralPath $runKey -Name $legacyRunName -ErrorAction SilentlyContinue
 }
@@ -166,6 +166,9 @@ if ($RemoveUserData) {
 } else {
     Remove-Item -LiteralPath (Join-Path $installDirectory 'PotPlayerFrameClip.exe') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $installDirectory 'PotPlayerFrameClip.exe.config') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $installDirectory 'FrameClipBridge64.dll') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $installDirectory 'FrameClipBridge32.dll') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $installDirectory 'FrameClipBridgeHost32.exe') -Force -ErrorAction SilentlyContinue
     Write-Host "Executable removed. Settings and classification data remain in $dataDirectory"
 }
 

@@ -395,17 +395,25 @@ if ($selectedMenuName -eq $menuName -and (Test-Path -LiteralPath $statePath)) {
 }
 if ($originalPreviousMenuName -eq $legacyMenuName) { $originalPreviousMenuName = '' }
 $menuBaseName = if ($selectedMenuName -eq $menuName -and $originalPreviousMenuName) { $originalPreviousMenuName } else { $selectedMenuName }
+if (-not $TestMode -and (Test-PotPlayerRunning)) {
+    throw 'PotPlayer is running. Close PotPlayer before installing or upgrading FrameClip because the native bridge remains loaded for the player process lifetime.'
+}
 $menuPath = Install-Menu $playerDirectory $menuBaseName $menuLanguage
 
 New-Item -ItemType Directory -Force -Path $installDirectory | Out-Null
 New-Item -ItemType Directory -Force -Path $dataDirectory | Out-Null
 if (-not $TestMode) {
-    Get-Process -Name 'PotPlayerFrameClip' -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process -Name 'PotPlayerFrameClip','FrameClipBridgeHost32' -ErrorAction SilentlyContinue | Stop-Process -Force
     Get-Process -Name $legacyRunName -ErrorAction SilentlyContinue | Stop-Process -Force
 }
 Copy-IfDifferent $sourceExe $installExe
 if (Test-Path -LiteralPath (Join-Path $releaseRoot 'PotPlayerFrameClip.exe.config')) {
     Copy-IfDifferent (Join-Path $releaseRoot 'PotPlayerFrameClip.exe.config') ($installExe + '.config')
+}
+foreach ($nativeFile in @('FrameClipBridge64.dll', 'FrameClipBridge32.dll', 'FrameClipBridgeHost32.exe')) {
+    $nativeSource = Join-Path $releaseRoot $nativeFile
+    if (-not (Test-Path -LiteralPath $nativeSource)) { throw "Missing native bridge file: $nativeFile" }
+    Copy-IfDifferent $nativeSource (Join-Path $installDirectory $nativeFile)
 }
 Copy-IfDifferent (Join-Path $releaseRoot 'uninstall.ps1') (Join-Path $installDirectory 'uninstall.ps1')
 

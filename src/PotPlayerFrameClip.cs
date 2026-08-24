@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Management;
 using Microsoft.Win32;
 using System.Runtime.InteropServices;
@@ -19,8 +20,8 @@ using System.Xml;
 [assembly: AssemblyDescription("Frame and source clip capture extension for PotPlayer")]
 [assembly: AssemblyProduct("PotPlayer FrameClip")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 PotPlayer FrameClip contributors")]
-[assembly: AssemblyVersion("0.3.1.0")]
-[assembly: AssemblyFileVersion("0.3.1.0")]
+[assembly: AssemblyVersion("0.3.2.0")]
+[assembly: AssemblyFileVersion("0.3.2.0")]
 
 namespace PotPlayerFrameClip
 {
@@ -301,6 +302,8 @@ namespace PotPlayerFrameClip
     internal static class NativeMethods
     {
         internal const int WH_MOUSE_LL = 14;
+        internal const int WH_MOUSE = 7;
+        internal const int WM_MOUSEMOVE = 0x0200;
         internal const int WM_RBUTTONDOWN = 0x0204;
         internal const int WM_RBUTTONUP = 0x0205;
         internal const int WM_LBUTTONDOWN = 0x0201;
@@ -332,6 +335,7 @@ namespace PotPlayerFrameClip
 
         internal delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
         internal delegate void WinEventDelegate(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint eventThread, uint eventTime);
+        internal delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct POINT
@@ -393,6 +397,9 @@ namespace PotPlayerFrameClip
         [DllImport("user32.dll", SetLastError = true)]
         internal static extern IntPtr SetWindowsHookEx(int hookId, LowLevelMouseProc callback, IntPtr module, uint threadId);
 
+        [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
+        internal static extern IntPtr SetWindowsHookExNative(int hookId, IntPtr callback, IntPtr module, uint threadId);
+
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool UnhookWindowsHookEx(IntPtr hook);
@@ -417,9 +424,6 @@ namespace PotPlayerFrameClip
         [DllImport("user32.dll")]
         internal static extern IntPtr GetForegroundWindow();
 
-        [DllImport("user32.dll")]
-        internal static extern uint GetDpiForWindow(IntPtr hwnd);
-
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         internal static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int maxCount);
 
@@ -428,6 +432,10 @@ namespace PotPlayerFrameClip
 
         [DllImport("user32.dll")]
         internal static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
 
         [DllImport("user32.dll")]
         internal static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
@@ -484,6 +492,16 @@ namespace PotPlayerFrameClip
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
         internal static extern IntPtr GetModuleHandle(string moduleName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        internal static extern IntPtr LoadLibrary(string path);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
+        internal static extern IntPtr GetProcAddress(IntPtr module, string name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool FreeLibrary(IntPtr module);
     }
 
     internal enum CaptureAction
@@ -1921,40 +1939,29 @@ namespace PotPlayerFrameClip
     internal sealed class ToastForm : Form
     {
         private readonly System.Windows.Forms.Timer closeTimer;
+        private readonly string titleText;
+        private readonly string messageText;
+        private readonly Font titleFont;
+        private readonly Font messageFont;
 
         internal ToastForm(string title, string message, int milliseconds, Rectangle workingArea)
         {
+            titleText = title ?? String.Empty;
+            messageText = message ?? String.Empty;
             Text = title;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
-            TopMost = false;
+            TopMost = true;
             BackColor = Color.FromArgb(34, 36, 39);
             ForeColor = Color.White;
             Width = 520;
             Height = 92;
-            Padding = new Padding(18, 13, 18, 12);
-
-            Label titleLabel = new Label();
-            titleLabel.Text = title;
-            titleLabel.ForeColor = Color.White;
-            titleLabel.Font = new Font("Microsoft YaHei UI", 10.5f, FontStyle.Bold);
-            titleLabel.Left = 18;
-            titleLabel.Top = 12;
-            titleLabel.Width = 480;
-            titleLabel.Height = 25;
-
-            Label messageLabel = new Label();
-            messageLabel.Text = message;
-            messageLabel.ForeColor = Color.FromArgb(215, 219, 224);
-            messageLabel.Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular);
-            messageLabel.Left = 18;
-            messageLabel.Top = 41;
-            messageLabel.Width = 480;
-            messageLabel.Height = 40;
-
-            Controls.Add(titleLabel);
-            Controls.Add(messageLabel);
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            UpdateStyles();
+            titleFont = new Font("Microsoft YaHei UI", 10.5f, FontStyle.Bold, GraphicsUnit.Point);
+            messageFont = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular, GraphicsUnit.Point);
 
             Left = workingArea.Right - Width - 18;
             Top = workingArea.Bottom - Height - 18;
@@ -1987,7 +1994,34 @@ namespace PotPlayerFrameClip
         protected override void OnShown(EventArgs eventArgs)
         {
             base.OnShown(eventArgs);
+            Refresh();
             closeTimer.Start();
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs eventArgs)
+        {
+            eventArgs.Graphics.Clear(BackColor);
+        }
+
+        protected override void OnPaint(PaintEventArgs eventArgs)
+        {
+            base.OnPaint(eventArgs);
+            Graphics graphics = eventArgs.Graphics;
+            graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+
+            using (SolidBrush titleBrush = new SolidBrush(Color.White))
+            using (SolidBrush messageBrush = new SolidBrush(Color.FromArgb(215, 219, 224)))
+            using (Pen borderPen = new Pen(Color.FromArgb(56, 59, 64)))
+            using (StringFormat titleFormat = new StringFormat(StringFormat.GenericTypographic))
+            using (StringFormat messageFormat = new StringFormat(StringFormat.GenericTypographic))
+            {
+                titleFormat.Trimming = StringTrimming.EllipsisCharacter;
+                titleFormat.FormatFlags = StringFormatFlags.NoWrap;
+                messageFormat.Trimming = StringTrimming.EllipsisCharacter;
+                graphics.DrawRectangle(borderPen, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
+                graphics.DrawString(titleText, titleFont, titleBrush, new RectangleF(18, 11, ClientSize.Width - 36, 25), titleFormat);
+                graphics.DrawString(messageText, messageFont, messageBrush, new RectangleF(18, 40, ClientSize.Width - 36, 41), messageFormat);
+            }
         }
 
         protected override void Dispose(bool disposing)
@@ -1996,6 +2030,8 @@ namespace PotPlayerFrameClip
             {
                 closeTimer.Stop();
                 closeTimer.Dispose();
+                titleFont.Dispose();
+                messageFont.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -2018,6 +2054,11 @@ namespace PotPlayerFrameClip
         internal bool IsBusy
         {
             get { return Thread.VolatileRead(ref busy) != 0; }
+        }
+
+        internal bool HasActiveToast
+        {
+            get { return activeToast != null && !activeToast.IsDisposed; }
         }
 
         private string T(string chinese, string english)
@@ -2906,126 +2947,200 @@ namespace PotPlayerFrameClip
         }
     }
 
-    internal sealed class FrameClipActionMenuForm : Form
+    internal sealed class NativeBridgeHook
     {
-        private readonly List<Button> actionButtons = new List<Button>();
-        private readonly Action<CaptureAction> dispatch;
+        internal int ProcessId;
+        internal uint ThreadId;
+        internal IntPtr Handle;
+    }
 
-        internal FrameClipActionMenuForm(string language, Action<CaptureAction> dispatch)
+    internal sealed class NativeBridgeMessageWindow : NativeWindow, IDisposable
+    {
+        internal const int ActionMessage = 0x8000 + 0x4C0;
+        internal const string WindowCaption = "PotPlayerFrameClip.NativeBridge";
+        private readonly CaptureEngine engine;
+        private readonly Control dispatcher;
+
+        internal NativeBridgeMessageWindow(CaptureEngine engine, Control dispatcher)
         {
-            this.dispatch = dispatch;
-            Text = UiText.MenuTitle(language);
-            FormBorderStyle = FormBorderStyle.None;
-            ShowInTaskbar = false;
-            TopMost = true;
-            StartPosition = FormStartPosition.Manual;
-            AutoScaleMode = AutoScaleMode.Dpi;
-            BackColor = Color.FromArgb(38, 39, 42);
-            ForeColor = Color.FromArgb(238, 238, 238);
-            Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular);
-            Padding = new Padding(1);
+            this.engine = engine;
+            this.dispatcher = dispatcher;
+            CreateParams parameters = new CreateParams();
+            parameters.Caption = WindowCaption;
+            parameters.Style = 0;
+            parameters.ExStyle = 0x00000080;
+            CreateHandle(parameters);
+        }
 
-            CaptureAction[] actions = new[]
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == ActionMessage)
             {
-                CaptureAction.CaptureFrame,
-                CaptureAction.MarkIn,
-                CaptureAction.MarkOut,
-                CaptureAction.ExportOriginal,
-                CaptureAction.ExportPrecise,
-                CaptureAction.ClearRange,
-                CaptureAction.Settings,
-                CaptureAction.OpenImageOutput,
-                CaptureAction.OpenVideoOutput
-            };
-
-            int top = 1;
-            for (int index = 0; index < actions.Length; index++)
-            {
-                if (index == 1 || index == 5)
+                int value = message.WParam.ToInt32();
+                if (value >= (int)CaptureAction.CaptureFrame && value <= (int)CaptureAction.OpenVideoOutput)
                 {
-                    Panel separator = new Panel();
-                    separator.BackColor = Color.FromArgb(78, 80, 84);
-                    separator.SetBounds(8, top + 4, 404, 1);
-                    Controls.Add(separator);
-                    top += 9;
+                    CaptureAction action = (CaptureAction)value;
+                    dispatcher.BeginInvoke(new Action(delegate { engine.Execute(action); }));
                 }
-
-                CaptureAction action = actions[index];
-                Button button = new Button();
-                button.Text = UiText.ActionLabel(language, action);
-                button.Tag = action;
-                button.TextAlign = ContentAlignment.MiddleLeft;
-                button.FlatStyle = FlatStyle.Flat;
-                button.FlatAppearance.BorderSize = 0;
-                button.FlatAppearance.MouseOverBackColor = Color.FromArgb(58, 60, 64);
-                button.FlatAppearance.MouseDownBackColor = Color.FromArgb(72, 74, 78);
-                button.BackColor = BackColor;
-                button.ForeColor = ForeColor;
-                button.TabStop = true;
-                button.SetBounds(1, top, 418, 31);
-                button.Click += ActionButtonClick;
-                button.KeyDown += ActionButtonKeyDown;
-                Controls.Add(button);
-                actionButtons.Add(button);
-                top += 31;
-            }
-
-            ClientSize = new Size(420, top + 1);
-            Deactivate += delegate { Close(); };
-            Shown += delegate
-            {
-                if (actionButtons.Count > 0) actionButtons[0].Focus();
-            };
-            Paint += delegate(object sender, PaintEventArgs eventArgs)
-            {
-                using (Pen border = new Pen(Color.FromArgb(92, 94, 98)))
-                    eventArgs.Graphics.DrawRectangle(border, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
-            };
-        }
-
-        internal void ShowAt(Point desiredLocation)
-        {
-            Rectangle workingArea = Screen.FromPoint(desiredLocation).WorkingArea;
-            int left = Math.Max(workingArea.Left, Math.Min(desiredLocation.X, workingArea.Right - Width));
-            int top = Math.Max(workingArea.Top, Math.Min(desiredLocation.Y, workingArea.Bottom - Height));
-            Location = new Point(left, top);
-            Show();
-            Activate();
-        }
-
-        private void ActionButtonClick(object sender, EventArgs eventArgs)
-        {
-            Button button = sender as Button;
-            if (button == null || !(button.Tag is CaptureAction)) return;
-            CaptureAction action = (CaptureAction)button.Tag;
-            Close();
-            dispatch(action);
-        }
-
-        private void ActionButtonKeyDown(object sender, KeyEventArgs eventArgs)
-        {
-            if (eventArgs.KeyCode == Keys.Escape)
-            {
-                Close();
-                eventArgs.Handled = true;
+                message.Result = IntPtr.Zero;
                 return;
             }
-            if (eventArgs.KeyCode != Keys.Up && eventArgs.KeyCode != Keys.Down) return;
-            int current = actionButtons.IndexOf(sender as Button);
-            if (current < 0) return;
-            int next = eventArgs.KeyCode == Keys.Down
-                ? (current + 1) % actionButtons.Count
-                : (current - 1 + actionButtons.Count) % actionButtons.Count;
-            actionButtons[next].Focus();
-            eventArgs.Handled = true;
+            base.WndProc(ref message);
+        }
+
+        public void Dispose()
+        {
+            if (Handle != IntPtr.Zero) DestroyHandle();
+        }
+    }
+
+    internal sealed class NativeBridgeManager : IDisposable
+    {
+        private readonly object syncRoot = new object();
+        private readonly Dictionary<int, NativeBridgeHook> hooks = new Dictionary<int, NativeBridgeHook>();
+        private readonly Action<string> trace;
+        private readonly System.Threading.Timer refreshTimer;
+        private IntPtr bridgeModule;
+        private IntPtr bridgeProcedure;
+        private Process x86Host;
+        private int refreshRunning;
+        private bool disposed;
+
+        internal NativeBridgeManager(Action<string> trace)
+        {
+            this.trace = trace;
+            string directory = AppDomain.CurrentDomain.BaseDirectory;
+            StartX86Host(Path.Combine(directory, "FrameClipBridgeHost32.exe"));
+            if (Environment.Is64BitOperatingSystem && Environment.Is64BitProcess)
+            {
+                string bridgePath = Path.Combine(directory, "FrameClipBridge64.dll");
+                if (File.Exists(bridgePath))
+                {
+                    bridgeModule = NativeMethods.LoadLibrary(bridgePath);
+                    if (bridgeModule != IntPtr.Zero)
+                        bridgeProcedure = NativeMethods.GetProcAddress(bridgeModule, "FrameClipMouseProc");
+                }
+                if (bridgeModule == IntPtr.Zero || bridgeProcedure == IntPtr.Zero)
+                    Trace("native-bridge64-load-failed " + Marshal.GetLastWin32Error());
+            }
+            refreshTimer = new System.Threading.Timer(Refresh, null, 0, 1000);
+        }
+
+        private void StartX86Host(string path)
+        {
+            if (!File.Exists(path)) return;
+            try
+            {
+                ProcessStartInfo startInfo = new ProcessStartInfo(path, "--parent-pid " + Process.GetCurrentProcess().Id)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                x86Host = Process.Start(startInfo);
+                Trace("native-bridge32-host " + (x86Host == null ? 0 : x86Host.Id));
+            }
+            catch (Exception exception)
+            {
+                Trace("native-bridge32-host-failed " + exception.GetType().Name);
+            }
+        }
+
+        private void Refresh(object state)
+        {
+            if (disposed || bridgeModule == IntPtr.Zero || bridgeProcedure == IntPtr.Zero ||
+                Interlocked.CompareExchange(ref refreshRunning, 1, 0) != 0) return;
+            try
+            {
+                HashSet<int> active = new HashSet<int>();
+                foreach (Process process in Process.GetProcesses())
+                {
+                    try
+                    {
+                        string name = process.ProcessName;
+                        if (name.IndexOf("PotPlayer", StringComparison.OrdinalIgnoreCase) < 0 ||
+                            name.IndexOf("FrameClip", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            name.IndexOf("64", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        IntPtr window = process.MainWindowHandle;
+                        if (window == IntPtr.Zero) continue;
+                        uint processId;
+                        uint threadId = NativeMethods.GetWindowThreadProcessId(window, out processId);
+                        if (threadId == 0) continue;
+                        active.Add(process.Id);
+                        EnsureHook(process.Id, threadId);
+                    }
+                    catch { }
+                    finally { process.Dispose(); }
+                }
+                RemoveInactiveHooks(active);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref refreshRunning, 0);
+            }
+        }
+
+        private void EnsureHook(int processId, uint threadId)
+        {
+            lock (syncRoot)
+            {
+                NativeBridgeHook existing;
+                if (hooks.TryGetValue(processId, out existing) && existing.ThreadId == threadId && existing.Handle != IntPtr.Zero)
+                    return;
+                if (existing != null && existing.Handle != IntPtr.Zero)
+                    NativeMethods.UnhookWindowsHookEx(existing.Handle);
+                IntPtr hook = NativeMethods.SetWindowsHookExNative(NativeMethods.WH_MOUSE, bridgeProcedure, bridgeModule, threadId);
+                if (hook == IntPtr.Zero)
+                {
+                    Trace("native-bridge64-hook-failed pid=" + processId + " error=" + Marshal.GetLastWin32Error());
+                    return;
+                }
+                hooks[processId] = new NativeBridgeHook { ProcessId = processId, ThreadId = threadId, Handle = hook };
+                Trace("native-bridge64-hooked pid=" + processId + " thread=" + threadId);
+            }
+        }
+
+        private void RemoveInactiveHooks(HashSet<int> active)
+        {
+            lock (syncRoot)
+            {
+                foreach (int processId in hooks.Keys.Where(delegate(int value) { return !active.Contains(value); }).ToArray())
+                {
+                    NativeBridgeHook entry = hooks[processId];
+                    if (entry.Handle != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(entry.Handle);
+                    hooks.Remove(processId);
+                    Trace("native-bridge64-unhooked pid=" + processId);
+                }
+            }
+        }
+
+        private void Trace(string message)
+        {
+            try { if (trace != null) trace(message); }
+            catch { }
+        }
+
+        public void Dispose()
+        {
+            disposed = true;
+            refreshTimer.Dispose();
+            lock (syncRoot)
+            {
+                foreach (NativeBridgeHook entry in hooks.Values)
+                    if (entry.Handle != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(entry.Handle);
+                hooks.Clear();
+            }
+            if (bridgeModule != IntPtr.Zero) NativeMethods.FreeLibrary(bridgeModule);
+            bridgeModule = IntPtr.Zero;
+            bridgeProcedure = IntPtr.Zero;
         }
     }
 
     internal sealed class MenuBridgeContext : ApplicationContext
     {
-        // PotPlayer 的 XML 菜单不提供第三方命令回调。原生 HMENU 可以使用独立命令 ID；
-        // 皮肤菜单则只作为入口，实际操作菜单由 FrameClip 自己显示和分发。这样不再依赖
-        // 九个自绘行的坐标，也不会在桥接失败时把点击退化成播放/暂停。
+        // PotPlayer 的 XML 菜单不提供第三方命令回调。原生 HMENU 使用独立命令 ID；
+        // 皮肤菜单保留 PotPlayer 自己绘制的九个叶子项，FrameClip 只按 UIA 暴露的
+        // 精确动作名称接管点击。菜单外观、层级和关闭行为仍由 PotPlayer 管理。
         private const uint RootCommandId = 0xEE00;
         private const uint CaptureCommandId = 0xEE01;
         private const uint MarkInCommandId = 0xEE02;
@@ -3042,6 +3157,8 @@ namespace PotPlayerFrameClip
         private readonly Control dispatcher;
         private readonly AppConfig config;
         private readonly CaptureEngine engine;
+        private readonly NativeBridgeMessageWindow bridgeMessageWindow;
+        private readonly NativeBridgeManager nativeBridge;
         private readonly System.Windows.Forms.Timer installRepairTimer;
         private readonly Dictionary<uint, NativeMethods.RECT> actionRects = new Dictionary<uint, NativeMethods.RECT>();
         private IntPtr mouseHook;
@@ -3052,17 +3169,10 @@ namespace PotPlayerFrameClip
         private IntPtr activeRootMenu;
         private IntPtr activeSubMenu;
         private IntPtr activeMenuWindow;
-        private IntPtr skinRootMenuWindow;
-        private IntPtr skinSubMenuWindow;
-        private NativeMethods.RECT skinRootClickRect;
-        private NativeMethods.RECT skinSubMenuClickRect;
-        private bool hasSkinClickGeometry;
         private DateTime pendingRootUntil = DateTime.MinValue;
         private DateTime menuSessionUntil = DateTime.MinValue;
-        private DateTime skinSubMenuUntil = DateTime.MinValue;
         private bool suppressNextLeftUp;
-        private int skinActionMenuQueued;
-        private FrameClipActionMenuForm skinActionMenu;
+        private int menuSessionGeneration;
 
         internal MenuBridgeContext(AppConfig config)
         {
@@ -3070,6 +3180,8 @@ namespace PotPlayerFrameClip
             dispatcher = new Control();
             dispatcher.CreateControl();
             engine = new CaptureEngine(config, dispatcher);
+            bridgeMessageWindow = new NativeBridgeMessageWindow(engine, dispatcher);
+            nativeBridge = new NativeBridgeManager(TraceMenu);
             installRepairTimer = new System.Windows.Forms.Timer();
             installRepairTimer.Interval = 3000;
             installRepairTimer.Tick += delegate
@@ -3121,30 +3233,17 @@ namespace PotPlayerFrameClip
                         TraceMenu("cancel external-left " + data.Point.X + "," + data.Point.Y);
                         ResetMenuTracking();
                     }
-                    // 原生菜单按 HMENU 的真实命令矩形分发。皮肤菜单不再猜测九个动作行，
-                    // 它只负责打开 FrameClip 自己拥有的动作菜单。
+                    // 标准菜单仍按 HMENU 的真实命令矩形分发；自绘皮肤菜单由已注入
+                    // PotPlayer UI 线程的原生桥接处理，这里不再猜测其窗口或坐标。
                     else if (TryHandleNativeMenuClick(data.Point))
-                    {
-                        suppressNextLeftUp = true;
-                        return new IntPtr(1);
-                    }
-                    else if (TryOpenSkinActionMenuFromSubMenu(data.Point))
-                    {
-                        suppressNextLeftUp = true;
-                        return new IntPtr(1);
-                    }
-                    else if (TryOpenSkinActionMenuFromRoot(data.Point))
                     {
                         suppressNextLeftUp = true;
                         return new IntPtr(1);
                     }
                     else
                     {
-                        // 皮肤菜单可能不为每一行创建独立窗口。保留本次短会话，等待
-                        // EVENT_OBJECT_SHOW 识别 FrameClip 的第一项；普通 PotPlayer 命令
-                        // 会在菜单关闭事件中自然清理状态。
-                        TraceMenu("defer unmatched player-left " + data.Point.X + "," + data.Point.Y);
-                        TouchMenuSession();
+                        TraceMenu("pass unmatched player-left " + data.Point.X + "," + data.Point.Y);
+                        ResetMenuTracking();
                     }
                 }
                 else if ((message == NativeMethods.WM_RBUTTONDOWN || message == NativeMethods.WM_MBUTTONDOWN) && IsMenuSessionActive())
@@ -3174,30 +3273,14 @@ namespace PotPlayerFrameClip
             }
             if (eventType == NativeMethods.EVENT_SYSTEM_MENUEND)
             {
-                ResetNativeMenuTracking();
-                return;
-            }
-            if (eventType == NativeMethods.EVENT_OBJECT_HIDE)
-            {
-                ForgetSkinMenuContainer(hwnd);
+                ResetMenuTracking();
                 return;
             }
             if (eventType != NativeMethods.EVENT_SYSTEM_MENUPOPUPSTART && eventType != NativeMethods.EVENT_OBJECT_SHOW) return;
             if (hwnd == IntPtr.Zero) return;
 
             if (eventType == NativeMethods.EVENT_OBJECT_SHOW)
-            {
-                if (IsMenuSessionActive() && CacheSkinMenuContainer(hwnd))
-                {
-                    TouchMenuSession();
-                    return;
-                }
-                if (IsMenuSessionActive() && CacheSkinActionWindow(hwnd))
-                {
-                    TouchMenuSession();
-                    return;
-                }
-            }
+            { }
             if (!IsMenuSessionActive()) return;
             if (!IsPotPlayerMenuWindow(hwnd)) return;
 
@@ -3312,117 +3395,13 @@ namespace PotPlayerFrameClip
             return UiText.TryMapActionLabel(text.ToString(), out action) && action == CaptureAction.CaptureFrame;
         }
 
-        private bool CacheSkinActionWindow(IntPtr hwnd)
-        {
-            StringBuilder className = new StringBuilder(128);
-            StringBuilder titleText = new StringBuilder(256);
-            NativeMethods.GetClassName(hwnd, className, className.Capacity);
-            NativeMethods.GetWindowText(hwnd, titleText, titleText.Capacity);
-            string title = titleText.ToString();
-            if (!className.ToString().StartsWith("Afx:", StringComparison.Ordinal) || title.Length == 0 || !IsPotPlayerWindow(hwnd)) return false;
-
-            CaptureAction action;
-            if (!TryMapSkinTitle(title, out action)) return false;
-
-            NativeMethods.RECT rect;
-            if (!NativeMethods.GetWindowRect(hwnd, out rect)) return false;
-            activeMenuWindow = hwnd;
-            if (action == CaptureAction.CaptureFrame)
-                QueueSkinActionMenu(new Point(rect.Left, rect.Top), hwnd, "action-window");
-            return true;
-        }
-
-        private bool CacheSkinMenuContainer(IntPtr hwnd)
-        {
-            if (hwnd == IntPtr.Zero || !NativeMethods.IsWindowVisible(hwnd) || !IsPotPlayerMenuWindow(hwnd)) return false;
-
-            NativeMethods.RECT rect;
-            if (!NativeMethods.GetWindowRect(hwnd, out rect)) return false;
-            int width = rect.Right - rect.Left;
-            int height = rect.Bottom - rect.Top;
-            if (width < 150 || width > 720) return false;
-
-            if (height >= 300)
-            {
-                skinRootMenuWindow = hwnd;
-                skinRootClickRect = rect;
-                hasSkinClickGeometry = true;
-                TraceMenu("root-window " + rect.Left + "," + rect.Top + "," + rect.Right + "," + rect.Bottom);
-                return true;
-            }
-
-            if (skinRootMenuWindow == IntPtr.Zero || height < 160 || height > 420) return false;
-            NativeMethods.RECT rootRect;
-            if (!NativeMethods.GetWindowRect(skinRootMenuWindow, out rootRect)) return false;
-            bool opensRight = Math.Abs(rect.Left - rootRect.Right) <= 20;
-            bool opensLeft = Math.Abs(rect.Right - rootRect.Left) <= 20;
-            bool verticallyRelated = rect.Bottom > rootRect.Top && rect.Top < rootRect.Bottom;
-            if ((!opensRight && !opensLeft) || !verticallyRelated) return false;
-
-            skinSubMenuWindow = hwnd;
-            skinSubMenuUntil = DateTime.UtcNow.AddSeconds(5);
-            return true;
-        }
-
-        private void ForgetSkinMenuContainer(IntPtr hwnd)
-        {
-            if (hwnd == skinSubMenuWindow) skinSubMenuWindow = IntPtr.Zero;
-            if (hwnd == skinRootMenuWindow)
-            {
-                skinRootMenuWindow = IntPtr.Zero;
-                skinSubMenuWindow = IntPtr.Zero;
-            }
-        }
-
         private void BeginMenuSession(NativeMethods.POINT point)
         {
             ResetMenuTracking();
             DateTime now = DateTime.UtcNow;
             pendingRootUntil = now.AddMilliseconds(1500);
             menuSessionUntil = now.AddSeconds(8);
-            CacheSkinClickGeometry(point);
-            TraceMenu("session root=" + skinRootClickRect.Left + "," + skinRootClickRect.Top + "," + skinRootClickRect.Right + "," + skinRootClickRect.Bottom +
-                " sub=" + skinSubMenuClickRect.Left + "," + skinSubMenuClickRect.Top + "," + skinSubMenuClickRect.Right + "," + skinSubMenuClickRect.Bottom);
-        }
-
-        private void CacheSkinClickGeometry(NativeMethods.POINT point)
-        {
-            double scale = GetPotPlayerMenuScale(point);
-            int rootWidth = (int)Math.Round(218 * scale);
-            int rootHeight = (int)Math.Round(572 * scale);
-            int subWidth = (int)Math.Round(306 * scale);
-            int subHeight = (int)Math.Round(226 * scale);
-
-            Rectangle workingArea = Screen.FromPoint(new Point(point.X, point.Y)).WorkingArea;
-            int rootLeft = point.X + rootWidth <= workingArea.Right ? point.X : point.X - rootWidth;
-            int rootTop = point.Y + rootHeight <= workingArea.Bottom ? point.Y : point.Y - rootHeight;
-            rootLeft = Math.Max(workingArea.Left, Math.Min(rootLeft, workingArea.Right - rootWidth));
-            rootTop = Math.Max(workingArea.Top, Math.Min(rootTop, workingArea.Bottom - rootHeight));
-
-            int subLeft = rootLeft + rootWidth + subWidth <= workingArea.Right
-                ? rootLeft + rootWidth
-                : rootLeft - subWidth;
-            subLeft = Math.Max(workingArea.Left, Math.Min(subLeft, workingArea.Right - subWidth));
-
-            skinRootClickRect = new NativeMethods.RECT(rootLeft, rootTop, rootLeft + rootWidth, rootTop + rootHeight);
-            skinSubMenuClickRect = new NativeMethods.RECT(subLeft, rootTop, subLeft + subWidth, rootTop + subHeight);
-            hasSkinClickGeometry = true;
-            TraceMenu("dpi-scale=" + scale.ToString("0.###", CultureInfo.InvariantCulture));
-        }
-
-        private double GetPotPlayerMenuScale(NativeMethods.POINT point)
-        {
-            IntPtr target = NativeMethods.WindowFromPoint(point);
-            if (target == IntPtr.Zero) target = NativeMethods.GetForegroundWindow();
-            IntPtr root = target == IntPtr.Zero ? IntPtr.Zero : NativeMethods.GetAncestor(target, NativeMethods.GA_ROOT);
-            if (root == IntPtr.Zero) root = target;
-            try
-            {
-                uint dpi = root == IntPtr.Zero ? 0 : NativeMethods.GetDpiForWindow(root);
-                if (dpi >= 96 && dpi <= 384) return dpi / 96.0;
-            }
-            catch (EntryPointNotFoundException) { }
-            return 1.0;
+            TraceMenu("session native-bridge");
         }
 
         private bool IsMenuSessionActive()
@@ -3439,12 +3418,9 @@ namespace PotPlayerFrameClip
 
         private void ResetMenuTracking()
         {
+            Interlocked.Increment(ref menuSessionGeneration);
             ResetNativeMenuTracking();
             menuSessionUntil = DateTime.MinValue;
-            skinRootMenuWindow = IntPtr.Zero;
-            skinSubMenuWindow = IntPtr.Zero;
-            skinSubMenuUntil = DateTime.MinValue;
-            hasSkinClickGeometry = false;
         }
 
         private void ResetNativeMenuTracking()
@@ -3454,116 +3430,6 @@ namespace PotPlayerFrameClip
             activeSubMenu = IntPtr.Zero;
             activeMenuWindow = IntPtr.Zero;
             actionRects.Clear();
-        }
-
-        private bool TryOpenSkinActionMenuFromRoot(NativeMethods.POINT point)
-        {
-            if (!IsActivePotPlayerInteraction(point)) return false;
-
-            IntPtr pointWindow = NativeMethods.WindowFromPoint(point);
-            string pointTitle;
-            NativeMethods.RECT titledRect;
-            if (TryGetFrameClipSkinMenuTitle(pointWindow, out pointTitle) &&
-                (pointTitle == UiText.MenuTitle(UiText.Chinese) || pointTitle == UiText.MenuTitle(UiText.English)) &&
-                NativeMethods.GetWindowRect(pointWindow, out titledRect))
-            {
-                QueueSkinActionMenu(GetSkinActionMenuLocation(titledRect, point), pointWindow, "root-title");
-                TraceMenu("open action-menu from root title");
-                return true;
-            }
-
-            NativeMethods.RECT rootRect = skinRootClickRect;
-            if (skinRootMenuWindow != IntPtr.Zero && NativeMethods.IsWindowVisible(skinRootMenuWindow))
-                NativeMethods.GetWindowRect(skinRootMenuWindow, out rootRect);
-            if (!hasSkinClickGeometry || !rootRect.Contains(point))
-            {
-                TraceMenu("arm-miss " + point.X + "," + point.Y + " geometry=" + hasSkinClickGeometry);
-                return false;
-            }
-            int relativeY = point.Y - rootRect.Top;
-
-            // FrameClip 入口固定在 XML 菜单第一行。实际菜单窗口矩形优先于右键点估算，
-            // 只接受首行区域，避免覆盖其他 PotPlayer 子菜单。
-            double scale = GetPotPlayerMenuScale(point);
-            if (relativeY < 0 || relativeY > (int)Math.Ceiling(38 * scale))
-            {
-                TraceMenu("arm-row-miss y=" + relativeY);
-                return false;
-            }
-
-            QueueSkinActionMenu(GetSkinActionMenuLocation(rootRect, point), pointWindow, "root-row");
-            TraceMenu("open action-menu from root");
-            return true;
-        }
-
-        private static Point GetSkinActionMenuLocation(NativeMethods.RECT rootRect, NativeMethods.POINT point)
-        {
-            int desiredX = rootRect.Right;
-            Rectangle workingArea = Screen.FromPoint(new Point(point.X, point.Y)).WorkingArea;
-            if (desiredX + 420 > workingArea.Right) desiredX = rootRect.Left - 420;
-            return new Point(desiredX, rootRect.Top);
-        }
-
-        private bool TryOpenSkinActionMenuFromSubMenu(NativeMethods.POINT point)
-        {
-            if (!IsActivePotPlayerInteraction(point) || DateTime.UtcNow > skinSubMenuUntil) return false;
-
-            NativeMethods.RECT subMenuRect = skinSubMenuClickRect;
-            IntPtr menuWindow = NativeMethods.WindowFromPoint(point);
-            if (skinSubMenuWindow != IntPtr.Zero && NativeMethods.IsWindowVisible(skinSubMenuWindow))
-            {
-                NativeMethods.RECT actualRect;
-                if (NativeMethods.GetWindowRect(skinSubMenuWindow, out actualRect)) subMenuRect = actualRect;
-                menuWindow = skinSubMenuWindow;
-            }
-            if (!hasSkinClickGeometry || !subMenuRect.Contains(point)) return false;
-
-            NativeMethods.RECT rootRect = skinRootClickRect;
-            if (skinRootMenuWindow != IntPtr.Zero && NativeMethods.IsWindowVisible(skinRootMenuWindow))
-            {
-                NativeMethods.RECT actualRootRect;
-                if (NativeMethods.GetWindowRect(skinRootMenuWindow, out actualRootRect)) rootRect = actualRootRect;
-            }
-            QueueSkinActionMenu(GetSkinActionMenuLocation(rootRect, point), menuWindow, "submenu-fallback");
-            TraceMenu("open action-menu from submenu fallback");
-            return true;
-        }
-
-        private void QueueSkinActionMenu(Point location, IntPtr potPlayerMenuWindow, string reason)
-        {
-            if ((skinActionMenu != null && !skinActionMenu.IsDisposed) ||
-                Interlocked.CompareExchange(ref skinActionMenuQueued, 1, 0) != 0) return;
-            TraceMenu("queue action-menu " + reason + " at " + location.X + "," + location.Y);
-            dispatcher.BeginInvoke(new Action(delegate
-            {
-                try
-                {
-                    if (potPlayerMenuWindow != IntPtr.Zero)
-                        NativeMethods.SendMessage(potPlayerMenuWindow, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
-                    if (skinRootMenuWindow != IntPtr.Zero)
-                        NativeMethods.SendMessage(skinRootMenuWindow, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
-                    if (skinSubMenuWindow != IntPtr.Zero)
-                        NativeMethods.SendMessage(skinSubMenuWindow, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
-
-                    ResetMenuTracking();
-                    skinActionMenu = new FrameClipActionMenuForm(config.Language, delegate(CaptureAction action)
-                    {
-                        TraceMenu("dispatch action-menu " + action);
-                        engine.Execute(action);
-                    });
-                    skinActionMenu.FormClosed += delegate
-                    {
-                        skinActionMenu = null;
-                        Interlocked.Exchange(ref skinActionMenuQueued, 0);
-                    };
-                    skinActionMenu.ShowAt(location);
-                }
-                catch (Exception exception)
-                {
-                    Interlocked.Exchange(ref skinActionMenuQueued, 0);
-                    TraceMenu("action-menu failed " + exception.Message);
-                }
-            }));
         }
 
         private void TraceMenu(string message)
@@ -3612,28 +3478,11 @@ namespace PotPlayerFrameClip
         private void DispatchAction(CaptureAction action, IntPtr menuWindow)
         {
             if (menuWindow != IntPtr.Zero) NativeMethods.PostMessage(menuWindow, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
+            IntPtr foreground = NativeMethods.GetForegroundWindow();
+            if (foreground != menuWindow && IsPotPlayerWindow(foreground))
+                NativeMethods.PostMessage(foreground, NativeMethods.WM_CANCELMODE, IntPtr.Zero, IntPtr.Zero);
             ResetMenuTracking();
             dispatcher.BeginInvoke(new Action(delegate { engine.Execute(action); }));
-        }
-
-        private bool TryMapSkinTitle(string title, out CaptureAction action)
-        {
-            return UiText.TryMapActionLabel(title, out action);
-        }
-
-        private bool TryGetFrameClipSkinMenuTitle(IntPtr hwnd, out string titleText)
-        {
-            titleText = string.Empty;
-            if (hwnd == IntPtr.Zero || !NativeMethods.IsWindowVisible(hwnd) || !IsPotPlayerWindow(hwnd)) return false;
-            StringBuilder className = new StringBuilder(128);
-            StringBuilder title = new StringBuilder(256);
-            NativeMethods.GetClassName(hwnd, className, className.Capacity);
-            NativeMethods.GetWindowText(hwnd, title, title.Capacity);
-            if (!className.ToString().StartsWith("Afx:", StringComparison.Ordinal)) return false;
-            titleText = title.ToString();
-            if (titleText.Length == 0) return false;
-
-            return true;
         }
 
         private bool PointTargetsPotPlayer(NativeMethods.POINT point)
@@ -3688,7 +3537,8 @@ namespace PotPlayerFrameClip
             if (foregroundEventHook != IntPtr.Zero) NativeMethods.UnhookWinEvent(foregroundEventHook);
             if (disposing)
             {
-                if (skinActionMenu != null && !skinActionMenu.IsDisposed) skinActionMenu.Close();
+                nativeBridge.Dispose();
+                bridgeMessageWindow.Dispose();
                 installRepairTimer.Stop();
                 installRepairTimer.Dispose();
                 dispatcher.Dispose();
@@ -3756,6 +3606,8 @@ namespace PotPlayerFrameClip
                 else if (action == "--precise") engine.Execute(CaptureAction.ExportPrecise);
                 else if (action == "--clear") engine.Execute(CaptureAction.ClearRange);
                 else if (action == "--settings") engine.Execute(CaptureAction.Settings);
+                else if (action == "--open-images") engine.Execute(CaptureAction.OpenImageOutput);
+                else if (action == "--open-videos") engine.Execute(CaptureAction.OpenVideoOutput);
                 else return 2;
 
                 do
@@ -3763,7 +3615,7 @@ namespace PotPlayerFrameClip
                     Application.DoEvents();
                     Thread.Sleep(100);
                 }
-                while (engine.IsBusy);
+                while (engine.IsBusy || engine.HasActiveToast);
                 return 0;
             }
         }

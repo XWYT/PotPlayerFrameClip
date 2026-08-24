@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Menu Title="PotPlayer FrameClip">
 	<SubMenu Name='参照帧与片段截取'>
-		<MenuItem CmdID='CMD_POPUPMENU_ETC' Name='截取当前帧（自动识别色彩 · 16-bit）' />
+		<MenuItem CmdID='ID_APP_ABOUT' Name='截取当前帧（自动识别色彩 · 16-bit）' />
 		<MenuItem CmdID='' />
-		<MenuItem CmdID='CMD_POPUPMENU_ETC' Name='设置入点' />
-		<MenuItem CmdID='CMD_POPUPMENU_ETC' Name='设置出点' />
-		<MenuItem CmdID='CMD_POPUPMENU_ETC' Name='导出原码片段（保留源色彩/DV + 原音频）' />
-		<MenuItem CmdID='CMD_POPUPMENU_ETC' Name='导出精确片段（可选编码 + PCM）' />
+		<MenuItem CmdID='ID_APP_ABOUT' Name='设置入点' />
+		<MenuItem CmdID='ID_APP_ABOUT' Name='设置出点' />
+		<MenuItem CmdID='ID_APP_ABOUT' Name='导出原码片段（保留源色彩/DV + 原音频）' />
+		<MenuItem CmdID='ID_APP_ABOUT' Name='导出精确片段（可选编码 + PCM）' />
 		<MenuItem CmdID='' />
-		<MenuItem CmdID='CMD_POPUPMENU_ETC' Name='清除入点和出点' />
-		<MenuItem CmdID='CMD_POPUPMENU_ETC' Name='设置…' />
-		<MenuItem CmdID='CMD_POPUPMENU_ETC' Name='打开当前作品图片文件夹' />
-		<MenuItem CmdID='CMD_POPUPMENU_ETC' Name='打开当前作品视频文件夹' />
+		<MenuItem CmdID='ID_APP_ABOUT' Name='清除入点和出点' />
+		<MenuItem CmdID='ID_APP_ABOUT' Name='设置…' />
+		<MenuItem CmdID='ID_APP_ABOUT' Name='打开当前作品图片文件夹' />
+		<MenuItem CmdID='ID_APP_ABOUT' Name='打开当前作品视频文件夹' />
 	</SubMenu>
 	<MenuItem CmdID='ID_BASE_OPEN' />
 	<MenuItem CmdID='CMD_POPUPMENU_OPEN'/>

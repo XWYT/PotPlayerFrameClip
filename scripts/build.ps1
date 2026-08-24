@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$Version = '0.3.1',
+    [string]$Version = '0.3.2',
     [switch]$SkipTests,
     [switch]$SkipInstaller
 )
@@ -41,6 +41,18 @@ function Get-InnoCompiler {
     throw 'Inno Setup Compiler was not found. Install it with: winget install --id JRSoftware.InnoSetup --exact --source winget'
 }
 
+function Get-ZigCompiler {
+    $fromPath = Get-Command zig.exe -ErrorAction SilentlyContinue
+    if ($fromPath) { return $fromPath.Source }
+    $packageRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+    if (Test-Path -LiteralPath $packageRoot) {
+        $candidate = Get-ChildItem -LiteralPath $packageRoot -Filter zig.exe -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+        if ($candidate) { return $candidate.FullName }
+    }
+    throw 'Zig compiler was not found. Install it with: winget install --id zig.zig --exact --source winget'
+}
+
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 Remove-Item -LiteralPath $release -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $obj -Recurse -Force -ErrorAction SilentlyContinue
@@ -50,8 +62,31 @@ Get-ChildItem -LiteralPath $dist -File -ErrorAction SilentlyContinue |
 New-Item -ItemType Directory -Force -Path $release | Out-Null
 New-Item -ItemType Directory -Force -Path $obj | Out-Null
 
+# Keep Zig caches inside the build tree so restricted shells and CI runners do not
+# need write access to the interactive user's LocalAppData directory.
+$env:ZIG_GLOBAL_CACHE_DIR = Join-Path $obj 'zig-global-cache'
+$env:ZIG_LOCAL_CACHE_DIR = Join-Path $obj 'zig-local-cache'
+New-Item -ItemType Directory -Force -Path $env:ZIG_GLOBAL_CACHE_DIR | Out-Null
+New-Item -ItemType Directory -Force -Path $env:ZIG_LOCAL_CACHE_DIR | Out-Null
+
+$zig = Get-ZigCompiler
+$bridge64 = Join-Path $release 'FrameClipBridge64.dll'
+$bridge32 = Join-Path $release 'FrameClipBridge32.dll'
+$bridgeHost32 = Join-Path $release 'FrameClipBridgeHost32.exe'
+& $zig cc -target x86_64-windows-gnu -O2 -shared `
+    (Join-Path $projectRoot 'native\frameclip_bridge.c') (Join-Path $projectRoot 'native\frameclip_bridge.def') `
+    -o $bridge64 -luser32 -lcomctl32
+if ($LASTEXITCODE -ne 0) { throw '64-bit native bridge compilation failed.' }
+& $zig cc -target x86-windows-gnu -O2 -shared `
+    (Join-Path $projectRoot 'native\frameclip_bridge.c') (Join-Path $projectRoot 'native\frameclip_bridge.def') `
+    -o $bridge32 -luser32 -lcomctl32
+if ($LASTEXITCODE -ne 0) { throw '32-bit native bridge compilation failed.' }
+& $zig cc -target x86-windows-gnu -O2 -municode '-Wl,/subsystem:windows' `
+    (Join-Path $projectRoot 'native\bridge_host.c') -o $bridgeHost32 -luser32 -lshell32
+if ($LASTEXITCODE -ne 0) { throw '32-bit bridge host compilation failed.' }
+
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    throw 'Version must use the form major.minor.patch, for example 0.3.1.'
+    throw 'Version must use the form major.minor.patch, for example 0.3.2.'
 }
 $assemblyVersion = $Version + '.0'
 $generatedSource = Join-Path $obj 'PotPlayerFrameClip.generated.cs'

@@ -1,6 +1,6 @@
 # PotPlayer FrameClip
 
-在 PotPlayer 右键菜单中直接截取高精度参照帧，或按入点、出点导出带声音的原码片段与后期友好片段。FrameClip 读取本地媒体源文件，不经过 Windows 桌面截图、播放器渲染、显示器色调映射等显示链路；SDR、HDR10/PQ、HLG 画面均按源编码特征保留，适合剪辑、调色、合成、画面分析与资料归档。
+PotPlayer 自带截图适合日常留图；FrameClip 面向后期参照，直接读取媒体源并输出 16-bit RGB PNG/TIFF，避免桌面捕获、播放器显示和显示器色调映射介入，同时保留 SDR、HDR10/PQ、HLG 的色彩解释信息。还可按入点、出点导出带声音的原码或后期友好片段，适用于剪辑、调色、合成与资料归档。
 
 安装后只增加一个简洁菜单：**参照帧与片段截取**。
 
@@ -16,7 +16,7 @@
 - 支持 32 位、64 位 PotPlayer，以及便携版目录。
 - 可指定输出根目录、图片格式、精确片段编码和 FFmpeg 路径。
 - 设置窗口和 PotPlayer 扩展菜单可切换简体中文或英语。
-- PotPlayer 使用皮肤菜单时，FrameClip 功能在独立的深色操作菜单中执行；占位项不会绑定播放/暂停。
+- PotPlayer 使用皮肤菜单时，九项功能直接在原生子菜单中执行，不再弹出额外操作菜单，也不会展开“配置/语言/其他”三级菜单或退化为播放/暂停。
 - 保留安装前的 PotPlayer 自定义菜单；重复安装、升级和卸载均带恢复逻辑。
 
 ## 精度说明
@@ -89,10 +89,10 @@ Agent 仍可能需要你确认 Windows SmartScreen 提示或 PotPlayer 便携版
 ### 方式二：下载安装包
 
 1. 从 GitHub Releases 下载一个文件：`PotPlayerFrameClip-v<版本>-Setup.exe`，不要下载 `Source code` 压缩包。
-2. 双击安装程序。Windows SmartScreen 在未签名开源程序上可能显示警告，请先核对文件名与 GitHub 仓库；确认来源后选择“更多信息”继续。
-3. 安装器会自动查找 PotPlayer 和 FFmpeg。便携版或自定义目录未被识别时，在向导中手动选择。
-4. 完成安装后关闭并重新打开一次 PotPlayer，使菜单选择稳定落盘。
-5. 播放本地媒体，右键选择 **参照帧与片段截取**。
+2. 关闭 PotPlayer，再双击安装程序。原生菜单桥接会在播放器进程生命周期内保持加载，不能在播放期间安全替换；不需要重启 Windows。
+3. Windows SmartScreen 在未签名开源程序上可能显示警告，请先核对文件名与 GitHub 仓库；确认来源后选择“更多信息”继续。
+4. 安装器会自动查找 PotPlayer 和 FFmpeg。便携版或自定义目录未被识别时，在向导中手动选择。
+5. 完成安装后重新打开 PotPlayer，播放本地媒体并右键选择 **参照帧与片段截取**。
 
 程序、设置、日志和作品别名位于：
 
@@ -120,7 +120,7 @@ $setup=Get-ChildItem -LiteralPath . -Filter 'PotPlayerFrameClip-v*-Setup.exe' | 
 便携版 PotPlayer 与自定义 FFmpeg：
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.1-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.2-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 可选参数：
@@ -172,13 +172,13 @@ $p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.1-Setup.exe' -ArgumentList
 
 ### 点击所有扩展按钮都变成播放或暂停
 
-这是 `0.2.x` 和 `0.3.0` 的旧菜单架构造成的。旧版把扩展项临时绑定到 PotPlayer 的播放/暂停命令，再依赖鼠标钩子覆盖；任何识别失败都会执行播放/暂停。`0.3.1` 已移除该绑定，必须升级安装并重新打开 PotPlayer：
+这是 `0.2.x` 和 `0.3.0` 的旧菜单架构造成的。旧版把扩展项临时绑定到 PotPlayer 的播放/暂停命令，再依赖鼠标钩子覆盖；任何识别失败都会执行播放/暂停。`0.3.1` 已移除该危险绑定，`0.3.2` 进一步移除了菜单首行和尺寸推断。请升级安装并重新打开 PotPlayer：
 
 ```powershell
 (Get-Item "$env:LOCALAPPDATA\PotPlayerFrameClip\PotPlayerFrameClip.exe").VersionInfo.FileVersion
 ```
 
-版本应为 `0.3.1.0` 或更高。随后确认实际菜单文件中没有旧占位命令。若 PotPlayer 不在 `D:\PotPlayer`，请替换为实际安装目录：
+版本应为 `0.3.2.0` 或更高。随后确认实际菜单文件中没有旧占位命令。若 PotPlayer 不在 `D:\PotPlayer`，请替换为实际安装目录：
 
 ```powershell
 Select-String -LiteralPath 'D:\PotPlayer\Menus\FrameClipMenu.xml' -Pattern 'ID_PLAY_PAUSE'
@@ -186,7 +186,23 @@ Select-String -LiteralPath 'D:\PotPlayer\Menus\FrameClipMenu.xml' -Pattern 'ID_P
 
 请根据实际 PotPlayer 目录调整路径。FrameClip 子菜单中不应出现匹配结果；主菜单自身正常的播放项不受影响。
 
+### 点击 FrameClip 条目却打开“关于 PotPlayer”
+
+这表示原生菜单桥接没有成功装入 PotPlayer。`0.3.2` 不再使用 UI Automation 或桌面级菜单坐标推断，而是通过随安装包提供的 x64/x86 桥接 DLL，在 PotPlayer UI 线程内拦截 FrameClip 子菜单命令。桥接文件不会覆盖或修改 PotPlayer 自带 DLL。
+
+先确认以下文件同时存在：
+
+```powershell
+Get-Item "$env:LOCALAPPDATA\PotPlayerFrameClip\FrameClipBridge64.dll",
+         "$env:LOCALAPPDATA\PotPlayerFrameClip\FrameClipBridge32.dll",
+         "$env:LOCALAPPDATA\PotPlayerFrameClip\FrameClipBridgeHost32.exe"
+```
+
+部分安全软件可能阻止线程级 Hook 或 DLL 装载。不要关闭系统防护；请检查拦截记录、核对安装包来源与 SHA-256，再决定是否允许 FrameClip。仍失败时附上 `%LOCALAPPDATA%\PotPlayerFrameClip\bridge-debug.log` 和 `menu-debug.log`。
+
 ### 设置窗口无法打开，或菜单动作明显错位
+
+`0.3.1` 使用外部窗口和菜单几何推断，可能误接管普通 PotPlayer 菜单。`0.3.2` 已移除该路径，皮肤菜单由 PotPlayer 进程内的原生桥接分发。先确认版本为 `0.3.2.0` 或更高。
 
 只重启 FrameClip 常驻程序，不需要结束 PotPlayer：
 
@@ -194,7 +210,7 @@ Select-String -LiteralPath 'D:\PotPlayer\Menus\FrameClipMenu.xml' -Pattern 'ID_P
 Stop-Process -Name PotPlayerFrameClip -Force -ErrorAction SilentlyContinue; Start-Process "$env:LOCALAPPDATA\PotPlayerFrameClip\PotPlayerFrameClip.exe"
 ```
 
-仍有问题时重新安装最新版。皮肤模式下，点击 FrameClip 入口会切换到 FrameClip 自己的深色操作菜单，不再直接点击 PotPlayer 的九个占位行。提交问题时请附上 PotPlayer 版本、皮肤名与 `menu-debug.log`。
+仍有问题时重新安装最新版。提交问题时请附上 PotPlayer 版本、32/64 位、皮肤名、`bridge-debug.log` 与 `menu-debug.log`。
 
 ### 提示无法定位当前播放文件
 
@@ -230,7 +246,7 @@ HDR 原图保留源传递函数，没有执行显示色调映射。普通查看�
 当前安装包没有商业代码签名。请从项目 Releases 下载，核对版本化文件名；发布者提供 SHA-256 时可运行：
 
 ```powershell
-Get-FileHash '.\PotPlayerFrameClip-v0.3.1-Setup.exe' -Algorithm SHA256
+Get-FileHash '.\PotPlayerFrameClip-v0.3.2-Setup.exe' -Algorithm SHA256
 ```
 
 ## 卸载
@@ -247,18 +263,19 @@ Get-FileHash '.\PotPlayerFrameClip-v0.3.1-Setup.exe' -Algorithm SHA256
 
 ## 从源码构建
 
-构建环境需要 .NET Framework 4.x C# 编译器和 Inno Setup 6：
+构建环境需要 .NET Framework 4.x C# 编译器、Zig 和 Inno Setup 6。Zig 只用于生成 x64/x86 原生桥接，不是运行时依赖：
 
 ```powershell
 winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.1
+winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.2
 ```
 
 构建会执行 C# 单元测试、菜单静态检查，以及隔离的安装、重复安装、卸载恢复测试。最终发布资产为：
 
 ```text
-dist\PotPlayerFrameClip-v0.3.1-Setup.exe
+dist\PotPlayerFrameClip-v0.3.2-Setup.exe
 ```
 
 `dist\release` 与 `dist\obj` 仅供本机构建暂存，GitHub Release 工作流只上传单个安装包。源码按仓库原目录发布。

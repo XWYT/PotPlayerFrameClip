@@ -1,6 +1,6 @@
 # PotPlayer FrameClip
 
-PotPlayer FrameClip adds a **Reference Frame & Clip Capture** submenu to PotPlayer. It decodes high-precision stills from the local source file and exports source-copy or edit-friendly clips between user-defined in/out points. The capture path bypasses Windows desktop screenshots, renderer output, display tone mapping, and monitor transforms.
+PotPlayer's built-in capture is suited to everyday stills. FrameClip is designed for post-production references: it reads local media directly and writes 16-bit RGB PNG/TIFF without involving desktop capture, the player display path, or monitor tone mapping, while retaining color interpretation data for SDR, HDR10/PQ, and HLG. It also exports source-copy or edit-friendly clips with audio between marked in and out points.
 
 ## Highlights
 
@@ -11,7 +11,7 @@ PotPlayer FrameClip adds a **Reference Frame & Clip Capture** submenu to PotPlay
 - Automatic per-title `Images` and `Videos` organization with release-name matching.
 - SDR, HDR10/PQ, and HLG source labeling, with opt-in HDR-to-SDR tone mapping.
 - Simplified Chinese and English settings and PotPlayer extension menus.
-- Fail-closed skin-menu integration: FrameClip actions run in an independent dark action menu and never fall back to play/pause.
+- Native skin-menu interaction: all nine actions run directly from PotPlayer's submenu, without an extra action popup, a third-level Misc menu, or a play/pause fallback.
 - 32-bit and 64-bit PotPlayer support, including portable installations.
 - Single-file per-user installer; FFmpeg remains an external dependency.
 
@@ -39,17 +39,19 @@ Install the latest stable release of PotPlayer FrameClip on this Windows compute
 
 Project URL: https://github.com/XWYT/PotPlayerFrameClip
 
-Use only the GitHub repository above. Download PotPlayerFrameClip-v<version>-Setup.exe from its official Releases page, not a source archive or third-party mirror. Verify a published SHA-256 value when available. Check PotPlayer, FFmpeg/FFprobe, and .NET Framework 4.6.2 or newer; install Gyan.FFmpeg with WinGet only when FFmpeg is missing. Detect standard, 32-bit, 64-bit, and portable PotPlayer installations without changing unrelated settings. Install for the current user without restarting Windows, then verify the installed executable, FrameClip process, and Menus\FrameClipMenu.xml. Do not disable Windows security or bypass an unverified warning. Report the installed version, resolved paths, verification results, and any action I still need to take.
+Use only the GitHub repository above. Download PotPlayerFrameClip-v<version>-Setup.exe from its official Releases page, not a source archive or third-party mirror. Verify a published SHA-256 value when available. Close PotPlayer before installing or upgrading because the native bridge remains loaded for the player process lifetime. Check PotPlayer, FFmpeg/FFprobe, and .NET Framework 4.6.2 or newer; install Gyan.FFmpeg with WinGet only when FFmpeg is missing. Detect standard, 32-bit, 64-bit, and portable PotPlayer installations without changing unrelated settings. Install for the current user without restarting Windows, then verify the installed executable, FrameClip process, and Menus\FrameClipMenu.xml. Do not disable Windows security or bypass an unverified warning. Report the installed version, resolved paths, verification results, and any action I still need to take.
 ```
 
 ### Option 2: install manually
 
 Download `PotPlayerFrameClip-v<version>-Setup.exe` from GitHub Releases and run it. Do not download the source archive. Restart PotPlayer once after installation. Portable installations can be selected in the wizard.
 
+Close PotPlayer before installing or upgrading. The native menu bridge remains loaded for the player process lifetime and cannot be replaced safely while the player is running. A Windows restart is not required.
+
 Silent installation:
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.1-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.2-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 ## Color handling
@@ -60,7 +62,7 @@ When **Create a tone-mapped Rec.709 SDR copy for HDR captures** is enabled, PQ a
 
 The language selector updates the FrameClip settings and extension menus. Restart PotPlayer after saving so its loaded XML menu refreshes. Windows may request administrator confirmation when the PotPlayer menu is installed in a protected directory.
 
-Starting with 0.3.1, skinned PotPlayer menus act only as the FrameClip entry point. The nine actions are displayed and dispatched by FrameClip itself. XML placeholders use a non-playback popup command, so a stopped helper or an unrecognized skin cannot toggle playback.
+Starting with 0.3.2, skinned menus use bundled x64/x86 native bridge DLLs. A thread-specific Windows hook loads the matching bridge into PotPlayer and intercepts only a pending FrameClip menu command. The bridge does not replace or patch PotPlayer files. Windows UI Automation, desktop-wide menu scanning, and the separate action popup are no longer used.
 
 Dolby Vision sources without a reliable HDR10/HLG-compatible base layer are rejected for decoded reference output. Transcoded ProRes/DNxHR output does not retain Dolby Vision dynamic metadata. Use source-copy export when the original streams must be preserved.
 
@@ -68,7 +70,8 @@ Dolby Vision sources without a reliable HDR10/HLG-compatible base layer are reje
 
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.1
+winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.2
 ```
 
 The release workflow uploads one asset: `PotPlayerFrameClip-v<version>-Setup.exe`.

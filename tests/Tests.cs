@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.Serialization;
 using System.Windows.Forms;
 
 namespace PotPlayerFrameClip
@@ -35,14 +34,24 @@ namespace PotPlayerFrameClip
             AppConfig defaults = new AppConfig();
             Check(!defaults.ExportRec709ForHdr, "HDR Rec.709 companion output must be disabled by default.");
             Check(defaults.Language == UiText.Chinese, "Simplified Chinese must remain the default language.");
-            using (FrameClipActionMenuForm actionMenu = new FrameClipActionMenuForm(UiText.English, delegate(CaptureAction action) { }))
+
+            using (ToastForm toast = new ToastForm("提示标题", "提示正文必须被完整绘制。", 2000, new Rectangle(0, 0, 1920, 1080)))
+            using (Bitmap toastBitmap = new Bitmap(toast.Width, toast.Height))
             {
-                Button[] actionButtons = actionMenu.Controls.OfType<Button>().ToArray();
-                Check(actionButtons.Length == 9, "Independent skin action menu must expose all nine commands.");
-                Check(actionButtons[0].Text.StartsWith("Capture current frame", StringComparison.Ordinal),
-                    "Independent skin action menu is not localized.");
-                Check(actionButtons.All(delegate(Button button) { return button.PreferredSize.Width <= button.Width; }),
-                    "Independent skin action menu clips an action label.");
+                toast.CreateControl();
+                toast.DrawToBitmap(toastBitmap, new Rectangle(Point.Empty, toast.Size));
+                int titlePixels = 0;
+                int messagePixels = 0;
+                for (int y = 8; y < 38; y++)
+                    for (int x = 14; x < toastBitmap.Width - 14; x++)
+                        if (toastBitmap.GetPixel(x, y).R > 120) titlePixels++;
+                for (int y = 38; y < toastBitmap.Height - 8; y++)
+                    for (int x = 14; x < toastBitmap.Width - 14; x++)
+                        if (toastBitmap.GetPixel(x, y).R > 120) messagePixels++;
+                Check(toast.Controls.Count == 0, "Toast must not create child control rectangles.");
+                Check(titlePixels > 20 && messagePixels > 20, "Toast title or body was not owner-drawn.");
+                string previewPath = Environment.GetEnvironmentVariable("FRAMECLIP_TOAST_PREVIEW");
+                if (!String.IsNullOrEmpty(previewPath)) toastBitmap.Save(previewPath);
             }
 
             VideoInfo pqInfo = new VideoInfo
@@ -74,10 +83,6 @@ namespace PotPlayerFrameClip
             Check(PotPlayerMediaLocator.ExtractPathFromIniValue(@"D:\Media\01.mkv") == @"D:\Media\01.mkv",
                 "Plain INI media path parsing failed.");
 
-            Type menuType = typeof(MenuBridgeContext);
-            object menuContext = FormatterServices.GetUninitializedObject(menuType);
-            MethodInfo titleMapper = menuType.GetMethod("TryMapSkinTitle", BindingFlags.Instance | BindingFlags.NonPublic);
-            Check(titleMapper != null, "Skin-menu title mapping method is missing.");
             CaptureAction[] expectedActions = new[]
             {
                 CaptureAction.CaptureFrame, CaptureAction.MarkIn, CaptureAction.MarkOut,
@@ -98,13 +103,12 @@ namespace PotPlayerFrameClip
             };
             for (int index = 0; index < expectedActions.Length; index++)
             {
-                object[] titleArguments = new object[] { titles[index], CaptureAction.CaptureFrame };
-                bool titleMapped = titleMapper != null && (bool)titleMapper.Invoke(menuContext, titleArguments);
-                Check(titleMapped && (CaptureAction)titleArguments[1] == expectedActions[index], "Menu title mapping failed at index " + index + ".");
+                CaptureAction mappedAction;
+                bool titleMapped = UiText.TryMapActionLabel(titles[index], out mappedAction);
+                Check(titleMapped && mappedAction == expectedActions[index], "Menu title mapping failed at index " + index + ".");
 
-                object[] englishArguments = new object[] { englishTitles[index], CaptureAction.CaptureFrame };
-                bool englishMapped = titleMapper != null && (bool)titleMapper.Invoke(menuContext, englishArguments);
-                Check(englishMapped && (CaptureAction)englishArguments[1] == expectedActions[index], "English menu title mapping failed at index " + index + ".");
+                bool englishMapped = UiText.TryMapActionLabel(englishTitles[index], out mappedAction);
+                Check(englishMapped && mappedAction == expectedActions[index], "English menu title mapping failed at index " + index + ".");
             }
 
             string temporary = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".exe");
@@ -147,12 +151,12 @@ namespace PotPlayerFrameClip
                 string menuPath = Path.Combine(mediaDirectory, "FrameClipMenu.xml");
                 File.WriteAllText(menuPath,
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?><Menu><SubMenu Name=\"参照帧与片段截取\">" +
-                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"截取当前帧（自动识别色彩 · 16-bit）\"/><MenuItem CmdID=\"\"/>" +
-                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"设置入点\"/><MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"设置出点\"/>" +
-                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"导出原码片段（保留源色彩/DV + 原音频）\"/>" +
-                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"导出精确片段（可选编码 + PCM）\"/><MenuItem CmdID=\"\"/>" +
-                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"清除入点和出点\"/><MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"设置…\"/>" +
-                    "<MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"打开当前作品图片文件夹\"/><MenuItem CmdID=\"CMD_POPUPMENU_ETC\" Name=\"打开当前作品视频文件夹\"/>" +
+                    "<MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"截取当前帧（自动识别色彩 · 16-bit）\"/><MenuItem CmdID=\"\"/>" +
+                    "<MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"设置入点\"/><MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"设置出点\"/>" +
+                    "<MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"导出原码片段（保留源色彩/DV + 原音频）\"/>" +
+                    "<MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"导出精确片段（可选编码 + PCM）\"/><MenuItem CmdID=\"\"/>" +
+                    "<MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"清除入点和出点\"/><MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"设置…\"/>" +
+                    "<MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"打开当前作品图片文件夹\"/><MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"打开当前作品视频文件夹\"/>" +
                     "</SubMenu><SubMenu Name=\"User menu\"><MenuItem CmdID=\"ID_APP_ABOUT\" Name=\"About\"/></SubMenu></Menu>",
                     new System.Text.UTF8Encoding(false));
                 Check(MenuLocalization.ApplyToFile(menuPath, UiText.English), "English menu localization failed.");
@@ -162,8 +166,8 @@ namespace PotPlayerFrameClip
                     "English submenu title was not written.");
                 Check(localizedMenu.SelectSingleNode("/Menu/SubMenu[1]/MenuItem[@CmdID != ''][1]").Attributes["Name"].Value.StartsWith("Capture current frame", StringComparison.Ordinal),
                     "English capture command was not written.");
-                Check(localizedMenu.SelectNodes("/Menu/SubMenu[1]/MenuItem[@CmdID='CMD_POPUPMENU_ETC']").Count == 9,
-                    "Menu localization changed the safe placeholder commands.");
+                Check(localizedMenu.SelectNodes("/Menu/SubMenu[1]/MenuItem[@CmdID='ID_APP_ABOUT']").Count == 9,
+                    "Menu localization changed the leaf placeholder commands.");
                 Check(localizedMenu.SelectSingleNode("/Menu/SubMenu[2]").Attributes["Name"].Value == "User menu",
                     "Menu localization modified an unrelated user menu.");
                 byte[] localizedBytes = File.ReadAllBytes(menuPath);

@@ -22,10 +22,13 @@ jobs:
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup --yes --no-progress
+      - name: Install Zig
+        shell: powershell
+        run: winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements --silent
       - name: Build and verify
         shell: powershell
         run: |
-          $version = '0.3.1'
+          $version = '0.3.2'
           if ('${{ github.ref_type }}' -eq 'tag') {
             $version = '${{ github.ref_name }}'.TrimStart('v')
           }
