@@ -1,6 +1,6 @@
 # PotPlayer FrameClip
 
-PotPlayer's built-in capture is suited to everyday stills. FrameClip is designed for post-production references: it reads local media directly and writes 16-bit RGB PNG/TIFF without involving desktop capture, the player display path, or monitor tone mapping, while retaining color interpretation data for SDR, HDR10/PQ, and HLG. It also exports source-copy or edit-friendly clips with audio between marked in and out points.
+PotPlayer's built-in capture is intended primarily for saving viewing stills and does not provide the HDR interpretation, 16-bit RGB output, and explicit import labeling expected in post-production; gamma, gamut, or brightness can therefore be misread after import. FrameClip reads the media source directly, bypasses desktop capture and monitor tone mapping, and creates 16-bit RGB PNG/TIFF reference frames from the source color characteristics, with an optional Rec.709 SDR companion while retaining the HDR original. It extends the same acquisition workflow with in/out marks, audio-preserving source-copy and ProRes/DNxHR precise clips, and automatic organization by title.
 
 ## Highlights
 
