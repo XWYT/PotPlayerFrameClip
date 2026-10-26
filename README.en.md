@@ -1,7 +1,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/readme/banner-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="assets/readme/banner-light.png">
-  <img alt="FrameClip: lossless stills, source-copy and precisely transcoded clips, with multiple HDR/SDR color spaces" src="assets/readme/banner-dark.png" width="1600" height="420">
+  <img alt="FrameClip: lossless stills, source-copy and precisely transcoded clips, with multiple HDR/SDR color spaces" src="assets/readme/banner-dark.png" width="1600">
 </picture>
 
 # PotPlayer FrameClip

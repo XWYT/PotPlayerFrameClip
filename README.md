@@ -1,7 +1,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/readme/banner-zh-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="assets/readme/banner-zh-light.png">
-  <img alt="FrameClip：影视静帧与片段采集，支持无损静帧、多格式片段导出和多种 HDR/SDR 色彩空间" src="assets/readme/banner-zh-dark.png" width="1600" height="420">
+  <img alt="FrameClip：影视静帧与片段采集，支持无损静帧、多格式片段导出和多种 HDR/SDR 色彩空间" src="assets/readme/banner-zh-dark.png" width="1600">
 </picture>
 
 # PotPlayer FrameClip

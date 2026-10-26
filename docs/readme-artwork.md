@@ -14,6 +14,11 @@ through a picture element; no web font, animation or runtime dependency is added
 README.md uses banner-zh-light.png and banner-zh-dark.png; README.en.md uses
 banner-light.png and banner-dark.png. The documentation check enforces this pairing.
 
+The intrinsic image size is 1600 x 420. Set only `width="1600"` on the
+fallback image, with no height attribute. GitHub constrains width to the README
+column; a fixed height stretches the artwork when that column narrows. Let the
+browser calculate height from the intrinsic ratio in both languages and themes.
+
 Regenerate with Python and Pillow 12.3.0, supplying locally licensed font paths:
 
 ```powershell
