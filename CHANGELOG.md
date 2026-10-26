@@ -10,6 +10,7 @@
 - Add multi-monitor notification placement, four spatial corner targets and a draggable custom-position preview.
 - Fix tray-menu disposal errors and refine saving feedback, button alignment and DPI layout.
 - Keep custom-window maximum track bounds consistent with DPI-scaled minimums on small desktops, preventing Windows from collapsing settings and maintenance layouts.
+- Make maintenance content scrollable when the desktop cannot fit the full scaled form; footer actions remain separate and reachable.
 - Run UI regression windows on a separate non-input Windows desktop. Maximization, popup and placement tests no longer flash test controls on the user's desktop; failure to isolate stops the tests. This helper is test-only.
 
 ### Menu Reliability

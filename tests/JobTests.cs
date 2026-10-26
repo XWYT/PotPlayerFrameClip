@@ -92,6 +92,18 @@ namespace PotPlayerFrameClip
                     foreach (Font font in fonts) font.Dispose();
                 }
             }
+            using (MaintenanceForm compact = new MaintenanceForm(new AppConfig { ReducedMotion = true }, false, (p,f,m,o) => Task.FromResult(0), root))
+            {
+                compact.AutoScaleMode = AutoScaleMode.None; compact.StartPosition = FormStartPosition.Manual;
+                compact.Location = new Point(-20000, -20000); compact.ShowInTaskbar = false;
+                compact.MinimumSize = new Size(580, 360); compact.ClientSize = new Size(620, 400); Realize(compact);
+                Label status = (Label)typeof(MaintenanceForm).GetField("status", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(compact);
+                Panel viewport = (Panel)status.Parent.Parent;
+                Check(viewport.AutoScroll && viewport.DisplayRectangle.Height > viewport.ClientSize.Height, "compact maintenance content is not scrollable");
+                Check(status.Bottom < status.Parent.Height, "compact maintenance status escapes scroll content");
+                viewport.ScrollControlIntoView(status);
+                Check(status.Parent.Top + status.Bottom <= viewport.ClientSize.Height, "compact maintenance status cannot scroll into view");
+            }
             using (JobCoordinator jobs = new JobCoordinator(new AppConfig(), delegate { }, Path.Combine(root,"maintenance-jobs")))
             {
                 Check(jobs.TryBeginMaintenance(), "idle maintenance rejected");
@@ -312,7 +324,7 @@ namespace PotPlayerFrameClip
                                     }
                             }
                             Check(Children(form).OfType<Button>().Where(b => b.Tag is string).All(b => b.Image != null), "native icon resource is missing");
-                            Check(form.Width >= 550 * scale, "DPI scaling collapsed the form bounds");
+                            Check(form.Width >= Math.Min(550 * scale, SystemInformation.MaxWindowTrackSize.Width), "DPI scaling collapsed the form bounds");
                             foreach (ChoiceBox choice in Children(form).OfType<ChoiceBox>().Where(c => c.Visible))
                                 Check(choice.Width >= choice.PreferredWidth, "settings choice is truncated: " + choice.AccessibleName);
                             ShowWindow(form.Handle, 0);

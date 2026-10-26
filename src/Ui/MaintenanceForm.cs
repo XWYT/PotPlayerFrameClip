@@ -33,7 +33,9 @@ namespace PotPlayerFrameClip
             Text = "FrameClip"; Font = UiTheme.Font(); ClientSize = new Size(620, uninstall ? 388 : 610); MinimumSize = new Size(580, uninstall ? 388 : 610);
             StartPosition = FormStartPosition.CenterScreen; MaximizeBox = false;
             bool upgrade = File.Exists(Path.Combine(AppPaths.DataDirectory, "install-state.json"));
-            body = new Panel { Dock = DockStyle.Fill, Padding = new Padding(28, 16, 28, 20) };
+            body = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+            Panel surface = new Panel { Dock = DockStyle.Top, Height = uninstall ? 264 : 496 };
+            body.Controls.Add(surface);
             heading = new Label { Text = T(config, uninstall ? "卸载 FrameClip" : upgrade ? "更新 FrameClip" : "安装 FrameClip", uninstall ? "Uninstall FrameClip" : upgrade ? "Update FrameClip" : "Install FrameClip"), Font = UiTheme.Font(16f, FontStyle.Bold), AutoEllipsis = true };
             description = new Label { Text = T(config, uninstall ? "移除程序与菜单集成。导出的素材始终保留。" : upgrade ? "更新程序，保留设置、提醒位置与任务记录。" : "连接 PotPlayer 与 FFmpeg，保留已有设置。", uninstall ? "Remove the app and menu integration. Exported media is always kept." : upgrade ? "Update while keeping settings, notification position and history." : "Connect PotPlayer and FFmpeg. Existing settings are kept."), Tag = "muted" };
             player = new TextBox { Text = DetectPlayer(config), BorderStyle = BorderStyle.None };
@@ -63,7 +65,7 @@ namespace PotPlayerFrameClip
             status = new Label { Text = T(config, "请先结束导出并关闭 PotPlayer。", "Finish exports and close PotPlayer first."), Tag = "muted", AutoEllipsis = true };
             progress = new Panel { Visible = false, BackColor = theme.Track };
             progress.Paint += delegate(object sender, PaintEventArgs e) { using (Brush brush = new SolidBrush(theme.AccentColor)) e.Graphics.FillRectangle(brush, progress.ClientRectangle); };
-            body.Controls.AddRange(new Control[] { heading, description, fields, optionRow, status, progress });
+            surface.Controls.AddRange(new Control[] { heading, description, fields, optionRow, status, progress });
             footer = new Panel { Dock = DockStyle.Bottom, Height = 64 };
             action = new ToolButton(theme) { Text = T(config, uninstall ? "卸载" : upgrade ? "更新" : "安装", uninstall ? "Uninstall" : upgrade ? "Update" : "Install"), Primary = true, Bordered = true, LogicalHeight = 32 };
             cancel = new ToolButton(theme) { Text = T(config, "取消", "Cancel"), Bordered = true, LogicalHeight = 32 };
@@ -73,14 +75,15 @@ namespace PotPlayerFrameClip
             action.Click += async delegate { await Execute(config); }; cancel.Click += delegate { Close(); };
             footer.Controls.AddRange(new Control[] { action, cancel, logs });
             footer.Paint += delegate(object sender, PaintEventArgs e) { using (Pen pen = new Pen(theme.Line)) e.Graphics.DrawLine(pen, 0, 0, footer.Width, 0); };
-            body.Layout += delegate {
-                float s = UiScale; int width = Math.Max(1, body.Width - (int)(56 * s)); int left = (int)(28 * s);
+            body.Layout += delegate { surface.Height = (int)((uninstall ? 264 : 496) * UiScale); };
+            surface.Layout += delegate {
+                float s = UiScale; int width = Math.Max(1, surface.Width - (int)(56 * s)); int left = (int)(28 * s);
                 heading.Bounds = new Rectangle(left, (int)(18 * s), width, (int)(36 * s));
                 description.Bounds = new Rectangle(left, (int)(62 * s), width, (int)(45 * s));
                 fields.Bounds = new Rectangle(left, (int)(121 * s), width, (int)(246 * s));
                 optionRow.Bounds = new Rectangle(left, (int)((uninstall ? 135 : 378) * s), width, (int)(32 * s));
                 status.Bounds = new Rectangle(left, (int)((uninstall ? 194 : 426) * s), width, (int)(42 * s));
-                progress.Bounds = new Rectangle(left, body.Height - (int)(12 * s), width, (int)(3 * s));
+                progress.Bounds = new Rectangle(left, surface.Height - (int)(12 * s), width, (int)(3 * s));
             };
             footer.Layout += delegate { float s = UiScale; action.Bounds = new Rectangle(footer.Width - (int)(116 * s), (int)(16 * s), (int)(88 * s), (int)(32 * s)); cancel.Bounds = new Rectangle(action.Left - (int)(100 * s), action.Top, (int)(88 * s), action.Height); logs.Bounds = new Rectangle((int)(28 * s), action.Top, action.Height, action.Height); };
             Content.Controls.Add(body); Content.Controls.Add(footer); theme.Apply(Content); progress.BackColor = theme.Track;
