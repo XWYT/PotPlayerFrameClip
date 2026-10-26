@@ -9,6 +9,7 @@
 - Default to two concurrent video jobs and an independent screenshot lane, with a playback-first resource policy.
 - Add multi-monitor notification placement, four spatial corner targets and a draggable custom-position preview.
 - Fix tray-menu disposal errors and refine saving feedback, button alignment and DPI layout.
+- Keep custom-window maximum track bounds consistent with DPI-scaled minimums on small desktops, preventing Windows from collapsing settings and maintenance layouts.
 - Run UI regression windows on a separate non-input Windows desktop. Maximization, popup and placement tests no longer flash test controls on the user's desktop; failure to isolate stops the tests. This helper is test-only.
 
 ### Menu Reliability

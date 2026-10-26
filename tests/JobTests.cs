@@ -29,6 +29,8 @@ namespace PotPlayerFrameClip
         [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] private static extern bool PrintWindow(IntPtr window, IntPtr dc, uint flags);
         [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr window, int index);
+        [StructLayout(LayoutKind.Sequential)] private struct TrackBounds
+        { internal Point Reserved; internal Size MaxSize; internal Point MaxPosition; internal Size MinTrack, MaxTrack; }
         private static int failures, checks;
         private static void Check(bool value, string message)
         {
@@ -332,6 +334,20 @@ namespace PotPlayerFrameClip
         }
         private static void NativeChrome(AppConfig config, JobCoordinator jobs)
         {
+            using (WorkspaceForm oversized = new WorkspaceForm(config))
+            {
+                oversized.MinimumSize = new Size(1440, 1220);
+                IntPtr data = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(TrackBounds)));
+                try
+                {
+                    Marshal.StructureToPtr(new TrackBounds { MaxTrack = new Size(1040, 800) }, data, false);
+                    SendMessage(oversized.Handle, 0x24, IntPtr.Zero, data);
+                    TrackBounds limits = (TrackBounds)Marshal.PtrToStructure(data, typeof(TrackBounds));
+                    Check(limits.MinTrack == oversized.MinimumSize, "scaled minimum track size was lost");
+                    Check(limits.MaxTrack.Width >= limits.MinTrack.Width && limits.MaxTrack.Height >= limits.MinTrack.Height, "desktop maximum track size contradicts scaled minimum");
+                }
+                finally { Marshal.FreeHGlobal(data); }
+            }
             foreach (string mode in new[] { "light", "dark" })
             {
                 config.Theme = mode; config.Language = UiText.Chinese;

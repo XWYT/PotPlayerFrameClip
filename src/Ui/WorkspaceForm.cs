@@ -99,7 +99,11 @@ namespace PotPlayerFrameClip
                 MinMax info = (MinMax)Marshal.PtrToStructure(message.LParam, typeof(MinMax));
                 Screen screen = Screen.FromHandle(Handle); Rectangle work = screen.WorkingArea, bounds = screen.Bounds;
                 info.MaxPosition = new Point(work.Left - bounds.Left, work.Top - bounds.Top); info.MaxSize = work.Size;
-                info.MinTrack = MinimumSize; Marshal.StructureToPtr(info, message.LParam, false); message.Result = IntPtr.Zero; return;
+                info.MinTrack = MinimumSize;
+                // USER32's desktop-sized default can be smaller than a DPI-scaled
+                // minimum, clamping the window before its content finishes scaling.
+                info.MaxTrack = new Size(Math.Max(info.MaxTrack.Width, info.MinTrack.Width), Math.Max(info.MaxTrack.Height, info.MinTrack.Height));
+                Marshal.StructureToPtr(info, message.LParam, false); message.Result = IntPtr.Zero; return;
             }
             base.WndProc(ref message);
         }
