@@ -1,25 +1,47 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/banner-zh-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/readme/banner-zh-light.png">
+  <img alt="FrameClip：影视静帧与片段采集，支持无损静帧、多格式片段导出和多种 HDR/SDR 色彩空间" src="assets/readme/banner-zh-dark.png" width="1600" height="420">
+</picture>
+
 # PotPlayer FrameClip
 
-PotPlayer FrameClip 是一款集成于 PotPlayer 右键菜单的参照帧与片段采集插件，可截取适合后期使用的高精度静帧，并按入点、出点导出带声音的视频片段。PotPlayer 自带截图主要面向观看时留图，对 HDR 色彩解释、16-bit RGB 输出和后期软件导入标识支持有限，素材进入调色或合成流程后容易出现 Gamma、色域或亮度判断错误。FrameClip 直接读取媒体源，不经过桌面捕获和显示器色调映射，依据源色彩特征生成 16-bit RGB PNG/TIFF，并可在保留 HDR 原图的同时输出 Rec.709 SDR 副本。在此基础上，插件还支持原码保留、ProRes/DNxHR 精确转码，以及按作品自动归档。
+**采集影视静帧与片段，用作创作参照或个人收藏。**
 
-安装后只增加一个简洁菜单：**参照帧与片段截取**。
+为调色收集色彩、光线和影调参照，为创作整理镜头与片段，或保存电影、剧集中喜爱的画面。通过 PotPlayer 右键菜单即可操作。FrameClip 直接读取源文件，不截取桌面画面，也不经过显示器的色调映射。
+
+支持无损静帧、多格式片段导出和多种 HDR/SDR 色彩空间。片段既可保留原码，也可精确转码，供后期编辑使用。
+
+**当前版本：0.4.0 预览版。** [下载与版本说明](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.0) · [English](README.en.md)
+
+安装后，PotPlayer 右键菜单中会出现 **参照帧与片段截取**。
 
 ## 主要功能
 
-- 截取 16-bit RGB PNG 或 TIFF 静帧。
-- 可选为 PQ/HLG HDR 截帧同时生成一张标准 Rec.709 SDR 参照图；原 HDR 图仍完整保留，默认关闭。
-- PNG 写入可用的色域、传递函数与范围标签；文件名同时记录色彩解释信息。
-- 导出原码 MKV 片段，流复制视频、音频、字幕与容器元数据。
-- 导出精确 MOV 片段，可选 ProRes 422 HQ、ProRes 4444、ProRes 4444 XQ、DNxHR HQX、DNxHR 444，并使用 24-bit PCM 音频。
-- 自动建立 `作品名\图片` 与 `作品名\视频`，识别季集、分辨率、平台、编码、发布组等常见命名差异。
-- 文件、媒体元数据和上级目录都没有作品名时，使用带稳定来源标识的“待归类”目录，避免把纯集数误判成片名。
-- 支持 32 位、64 位 PotPlayer，以及便携版目录。
-- 可指定输出根目录、图片格式、精确片段编码和 FFmpeg 路径。
-- 设置窗口和 PotPlayer 扩展菜单可切换简体中文或英语。
-- PotPlayer 使用皮肤菜单时，九项功能直接在原生子菜单中执行，不再弹出额外操作菜单，也不会展开“配置/语言/其他”三级菜单或退化为播放/暂停。
-- 保留安装前的 PotPlayer 自定义菜单；重复安装、升级和卸载均带恢复逻辑。
+- **无损静帧**：直接从源文件截取画面，支持多种图片格式，并记录色彩信息，便于后续使用和整理。
+- **HDR 与 SDR 参照**：支持多种 HDR/SDR 色彩空间。保存 HDR 原图时，还可生成便于查看的 SDR 副本。
+- **片段导出**：可保留原码，也可按精确切点转码为适合后期编辑的格式。
+- **后台处理**：多个任务可同时导出，导出期间也能截图。进度随时可查，任务支持取消、重试和打开结果文件。GPU 可用时优先使用硬件解码，不降低图片精度，也不擅自更换所选编码格式。
+- **按作品归档**：自动建立 `作品名\图片` 与 `作品名\视频` 文件夹，识别剧集季数、集数及常见文件命名。无法确认片名时放入“待归类”目录，避免误归到其他作品。
+- **原生操作**：直接通过 PotPlayer 右键菜单截取。支持中英双语、明暗主题和多显示器提醒，兼容 32/64 位及便携版播放器。升级保留自定义菜单，卸载时恢复原有菜单。
+
+输出位置、图片格式、转码预设、性能策略和提醒位置均可在设置中调整。任务使用提交时确定的源文件、截取范围和设置，不受之后的播放操作或设置调整影响。
+
+0.4.0 更新了原生界面，加入任务进度、并行导出和 GPU 优先处理，并修复菜单桥接问题，详见[版本说明](docs/releases/v0.4.0.md)。这是预览版，Intel/AMD 实机、不同皮肤、混合 DPI 和长时间使用的验证尚未完成。公开的轻量安装包不含 FFmpeg。
+
+## GPU 处理
+
+在“设置 > 性能 > 视频与截图处理”中，可选择“GPU 优先”（默认）或“仅 CPU”。硬件解码使用已有的 FFmpeg 和显卡驱动，不额外打包 CUDA Toolkit。
+
+程序根据设备和源格式选择 CUDA、D3D11VA、Intel QSV，或在单显卡环境下回退到 DXVA2；多显卡环境按设备分别分配任务和资源预算。任务中心会显示实际使用的后端，不支持硬件解码或资源不足时改用 CPU。短任务不一定比 CPU 更快。
+
+GPU 优先不会改变所选的 ProRes/DNxHR 编码、16-bit PNG/TIFF 输出或原有色彩处理流程。原码复制不需要解码。Intel/AMD 已通过调度策略测试，但尚未完成实机验证，不能视为适配了所有型号。适用范围、开源方案评估和本机实测见 [GPU 处理说明](docs/gpu-processing.md)。
 
 ## 精度说明
+
+静帧提供 16-bit RGB PNG/TIFF；原码片段使用 MKV，精确片段使用 MOV，支持 ProRes 422 HQ、4444、4444 XQ、DNxHR HQX、444 与 24-bit PCM 音频。PNG 写入可用色彩标签，文件名记录色彩解释信息；原码复制保留可复制的音视频、字幕和元数据。
+
+这里的“无损”指 PNG/TIFF 的图片压缩和原码片段不重新编码。视频解码、YCbCr 到 RGB 转换和源文件本身仍有精度边界；16-bit 输出不会恢复源中已经丢失的细节。ProRes/DNxHR 属于重新编码，不能称为源流无损复制。
 
 FrameClip 的 HDR 原图转换仅完成 YCbCr 到 RGB 的矩阵与码值范围变换，不应用显示 LUT，也不改变 PQ/HLG 传递函数。HDR 图片在普通图片查看器中可能显得暗淡或异常，这是查看器按错误传递函数显示造成的结果。导入后期软件后，应依据文件名和源元数据指定正确的输入色彩空间。
 
@@ -36,7 +58,21 @@ Dolby Vision Profile 5 等缺少可靠 HDR10/HLG 兼容基础层的来源会被�
 | 运行环境 | .NET Framework 4.6.2 或更高版本 |
 | 媒体工具 | `ffmpeg.exe` 与同目录下的 `ffprobe.exe`；HDR 转 Rec.709 副本需要 `zscale` 和 `tonemap` 滤镜 |
 
-FrameClip 不捆绑 PotPlayer、FFmpeg 或 .NET Framework。程序运行期间不访问网络。
+FrameClip 不捆绑 PotPlayer 或 .NET Framework。公开轻量包不含 FFmpeg；本地离线完整版可选安装专用 FFmpeg。程序运行期间不访问网络。
+
+### 安装器与离线 FFmpeg
+
+- 安装、升级、卸载使用与主程序一致的原生界面；“开机自启动”表示 Windows 用户登录后自动运行 FrameClip。
+- 轻量包 Setup.exe：使用已有 FFmpeg，或稍后在设置中配置。未配置时仍可安装，但截图和导出暂不可用。
+- 离线完整版 Setup-Full.exe：增加“未安装，配置内置 FFmpeg”。无需额外联网，安装在程序目录 tools/ffmpeg/<版本>/，不改 PATH、不覆盖外部版本。
+- 已有版本须包含同一目录下的 ffmpeg.exe 与 ffprobe.exe。升级保留已有配置；选择“稍后配置”不会清空之前的路径。
+- 安全覆盖升级不是运行中热更新：先完成任务并关闭播放器，安装器备份后替换；配置失败回退。卸载默认保留设置、记录和导出素材，删除设置须主动勾选。
+- 内置媒体工具是 Win64 构建；32 位 PotPlayer 可在 64 位 Windows 使用。32 位 Windows 应选兼容的外部 FFmpeg。
+- Full 包目前为本地开发候选；公开发布前还需完成对应源码与第三方许可材料归档，不表示 GitHub 已提供此包。
+
+构建离线候选：先运行 scripts/prepare-ffmpeg.ps1 -Download，再运行 scripts/build.ps1 -Version 0.4.0 -BundleFFmpeg。下载仅发生于构建时，版本与 SHA256 固定在 installer/ffmpeg-manifest.json。
+
+静默安装参数：/FFMPEGMODE=existing|bundled|later；已有版本配合 /FFMPEGPATH="完整路径"。轻量包请求 bundled 会在替换前失败。完整包未检测到已有 FFmpeg 时默认内置版本。
 
 ### 安装 FFmpeg
 
@@ -75,7 +111,7 @@ winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source 
 项目地址：https://github.com/XWYT/PotPlayerFrameClip
 
 要求：
-1. 只从上述项目的正式 GitHub Releases 下载最新稳定版安装程序 PotPlayerFrameClip-v<版本>-Setup.exe，不要下载源码压缩包，也不要从第三方网站获取文件。
+1. 从上述项目 GitHub Releases 下载本 README 所述的 0.4.0 预览版安装程序 PotPlayerFrameClip-v0.4.0-Setup.exe。明确告诉我这是预览版；不要下载源码压缩包，也不要从第三方网站获取文件。
 2. 确认下载链接属于上述 GitHub 仓库；如果发布页提供 SHA-256，请在安装前核对。安装包目前没有商业代码签名，不要关闭 Windows 安全功能，也不要在来源无法确认时绕过安全警告。
 3. 检查 PotPlayer、ffmpeg.exe、ffprobe.exe 和 .NET Framework 4.6.2 或更高版本。缺少 FFmpeg 时，优先使用 WinGet 安装 Gyan.FFmpeg；不要重新安装或修改已经正常工作的依赖。
 4. 自动识别 PotPlayer 安装目录和 FFmpeg 路径。标准安装、32 位、64 位或便携版无法自动识别时，再根据本机实际路径向安装程序传入 /POTPLAYERDIR 和 /FFMPEGPATH。
@@ -120,7 +156,7 @@ $setup=Get-ChildItem -LiteralPath . -Filter 'PotPlayerFrameClip-v*-Setup.exe' | 
 便携版 PotPlayer 与自定义 FFmpeg：
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.3-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 可选参数：
@@ -163,6 +199,12 @@ $p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.3-Setup.exe' -ArgumentList
 
 ## 问题排查
 
+### 点击插件菜单却打开“关于 PotPlayer”
+
+0.4.0 修复了桥接钩子存在、但目标播放器尚未完成初始化时误判就绪的问题。新版在播放器进程确认桥接已执行后才标记就绪，并限制重试频率。请先结束导出、正常退出 PotPlayer，再升级并重新打开播放器。不要在播放器运行时替换桥接 DLL。
+
+如果仍然发生，请记录 PotPlayer 版本、位数、皮肤名和显示缩放比例，并附上用户数据目录中的 `bridge-debug.log`、`menu-debug.log` 和最新运行日志。日志可能包含本地路径，公开提交前请检查并遮盖个人信息。
+
 ### 右键菜单没有“参照帧与片段截取”
 
 1. 关闭并重新打开 PotPlayer。
@@ -204,11 +246,7 @@ Get-Item "$env:LOCALAPPDATA\PotPlayerFrameClip\FrameClipBridge64.dll",
 
 `0.3.1` 使用外部窗口和菜单几何推断，可能误接管普通 PotPlayer 菜单。`0.3.2` 已移除该路径，皮肤菜单由 PotPlayer 进程内的原生桥接分发；`0.3.3` 进一步限制桥接只拦截 FrameClip 占位命令，普通 PotPlayer 子菜单命令会继续交还播放器处理。先确认版本为 `0.3.3.0` 或更高。
 
-只重启 FrameClip 常驻程序，不需要结束 PotPlayer：
-
-```powershell
-Stop-Process -Name PotPlayerFrameClip -Force -ErrorAction SilentlyContinue; Start-Process "$env:LOCALAPPDATA\PotPlayerFrameClip\PotPlayerFrameClip.exe"
-```
+先等待导出结束，再从托盘退出 FrameClip，重新启动用户数据目录中的 `PotPlayerFrameClip.exe`。不要在有任务时强制结束进程。
 
 仍有问题时重新安装最新版。提交问题时请附上 PotPlayer 版本、32/64 位、皮肤名、`bridge-debug.log` 与 `menu-debug.log`。
 
@@ -246,7 +284,7 @@ HDR 原图保留源传递函数，没有执行显示色调映射。普通查看�
 当前安装包没有商业代码签名。请从项目 Releases 下载，核对版本化文件名；发布者提供 SHA-256 时可运行：
 
 ```powershell
-Get-FileHash '.\PotPlayerFrameClip-v0.3.3-Setup.exe' -Algorithm SHA256
+Get-FileHash '.\PotPlayerFrameClip-v0.4.0-Setup.exe' -Algorithm SHA256
 ```
 
 ## 卸载
@@ -269,16 +307,16 @@ Get-FileHash '.\PotPlayerFrameClip-v0.3.3-Setup.exe' -Algorithm SHA256
 winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.3
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.0
 ```
 
 构建会执行 C# 单元测试、菜单静态检查，以及隔离的安装、重复安装、卸载恢复测试。最终发布资产为：
 
 ```text
-dist\PotPlayerFrameClip-v0.3.3-Setup.exe
+dist\PotPlayerFrameClip-v0.4.0-Setup.exe
 ```
 
-`dist\release` 与 `dist\obj` 仅供本机构建暂存，GitHub Release 工作流只上传单个安装包。源码按仓库原目录发布。
+`dist\release` 与 `dist\obj` 仅供本机构建暂存。GitHub 工作流只为轻量安装包与 SHA-256 文件创建草稿，不自动公开 Full 包；验收后再发布预览版。源码按仓库原目录发布。横幅是静态 PNG，提供明暗两版，不增加程序运行时依赖。
 
 ## 隐私与安全边界
 

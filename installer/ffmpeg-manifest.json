@@ -1,0 +1,8 @@
+{
+  "version": "8.1.3-20261026",
+  "archive": "ffmpeg-n8.1.3-24-g92611900bb-win64-lgpl-shared-8.1.zip",
+  "sha256": "96AFE9BEE66012F4CBC336A473F0B595060D73BDC5EFE4331D55101500D0A93E",
+  "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-26-14-25/ffmpeg-n8.1.3-24-g92611900bb-win64-lgpl-shared-8.1.zip",
+  "upstream": "https://github.com/BtbN/FFmpeg-Builds",
+  "files": ["ffmpeg.exe", "ffprobe.exe", "avcodec-62.dll", "avformat-62.dll", "avfilter-11.dll", "avutil-60.dll", "avdevice-62.dll", "swscale-9.dll", "swresample-6.dll", "LICENSE.txt", "provenance.json"]
+}

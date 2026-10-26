@@ -4,16 +4,20 @@ param(
     [string]$InstallDirectory,
     [string]$DataDirectory,
     [switch]$TestMode,
+    [switch]$KeepProgramFiles,
     [switch]$Elevated
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'maintenance.ps1')
 $scriptPath = $MyInvocation.MyCommand.Path
 $appName = 'PotPlayerFrameClip'
 if (-not $InstallDirectory) { $InstallDirectory = Join-Path $env:LOCALAPPDATA $appName }
 $installDirectory = [IO.Path]::GetFullPath($InstallDirectory)
 if (-not $DataDirectory) { $DataDirectory = Join-Path $env:LOCALAPPDATA $appName }
 $dataDirectory = [IO.Path]::GetFullPath($DataDirectory)
+Assert-FrameClipSafeDirectory $dataDirectory
+Assert-FrameClipSafeDirectory $installDirectory
 $statePath = Join-Path $dataDirectory 'install-state.json'
 $pendingMenuPath = Join-Path $dataDirectory 'menu-selection.pending'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
@@ -167,6 +171,7 @@ function Restart-Elevated {
         '-Elevated'
     )
     if ($RemoveUserData) { $parts += '-RemoveUserData' }
+    if ($KeepProgramFiles) { $parts += '-KeepProgramFiles' }
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($parts -join ' '))
     $process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru `
         -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded)
@@ -176,6 +181,8 @@ function Restart-Elevated {
 $state = $null
 if (Test-Path -LiteralPath $statePath) {
     $state = Get-ValidatedInstallState (Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json)
+    Assert-FrameClipSafeDirectory $state.PlayerDirectory
+    Assert-FrameClipSafeDirectory ([IO.Path]::GetDirectoryName($state.MenuPath))
     if ((Test-Path -LiteralPath $state.MenuPath) -and -not (Test-FrameClipMenuFile $state.MenuPath)) {
         throw 'The recorded menu file is not a verified FrameClip menu. No PotPlayer settings were changed.'
     }
@@ -226,7 +233,7 @@ if (-not $TestMode -and (Test-PotPlayerRunning)) {
 }
 
 if (-not $TestMode) {
-    Get-Process -Name 'PotPlayerFrameClip','FrameClipBridgeHost32' -ErrorAction SilentlyContinue | Stop-Process -Force
+    Stop-FrameClipForMaintenance $installDirectory $dataDirectory
     Remove-ItemProperty -LiteralPath $runKey -Name $appName -ErrorAction SilentlyContinue
     Remove-ItemProperty -LiteralPath $runKey -Name $legacyRunName -ErrorAction SilentlyContinue
 }
@@ -251,18 +258,20 @@ if ($state) {
     if ($state.MenuPath -and (Test-Path -LiteralPath $state.MenuPath)) { Remove-Item -LiteralPath $state.MenuPath -Force }
 }
 
+Assert-FrameClipSafeDirectory $dataDirectory
+Assert-FrameClipSafeDirectory $installDirectory
 if ($RemoveUserData) {
-    Remove-Item -LiteralPath $dataDirectory -Recurse -Force -ErrorAction SilentlyContinue
-    if (-not $installDirectory.Equals($dataDirectory, [StringComparison]::OrdinalIgnoreCase)) {
-        Remove-Item -LiteralPath $installDirectory -Recurse -Force -ErrorAction SilentlyContinue
+    # Delete known metadata only, never an exported library or user directory.
+    foreach ($name in @('FrameClip.ini','range.state','library-aliases.tsv','jobs.xml','install-state.json','menu-selection.pending')) {
+        $path = Join-Path $dataDirectory $name
+        if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force }
     }
-} else {
-    Remove-Item -LiteralPath (Join-Path $installDirectory 'PotPlayerFrameClip.exe') -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $installDirectory 'PotPlayerFrameClip.exe.config') -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $installDirectory 'FrameClipBridge64.dll') -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $installDirectory 'FrameClipBridge32.dll') -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $installDirectory 'FrameClipBridgeHost32.exe') -Force -ErrorAction SilentlyContinue
-    Write-Host "Executable removed. Settings and classification data remain in $dataDirectory"
+}
+if (-not $KeepProgramFiles) {
+    foreach ($name in @('PotPlayerFrameClip.exe','PotPlayerFrameClip.exe.config','FrameClipBridge64.dll','FrameClipBridge32.dll','FrameClipBridgeHost32.exe')) {
+        $path = Join-Path $installDirectory $name
+        if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force }
+    }
 }
 
 Write-Host 'PotPlayer FrameClip uninstalled. Restart PotPlayer once.'

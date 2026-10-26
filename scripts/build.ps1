@@ -1,11 +1,13 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$Version = '0.3.3',
+    [string]$Version = '0.4.0',
     [switch]$SkipTests,
-    [switch]$SkipInstaller
+    [switch]$SkipInstaller,
+    [switch]$BundleFFmpeg
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'compiler.ps1')
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $projectRoot 'src\PotPlayerFrameClip.cs'
 $dist = Join-Path $projectRoot 'dist'
@@ -54,6 +56,11 @@ function Get-ZigCompiler {
 }
 
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
+foreach ($generated in @($release, $obj)) {
+    if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($generated)) -ne [IO.Path]::GetFullPath($dist)) {
+        throw 'Generated cleanup target is outside this checkout dist directory.'
+    }
+}
 Remove-Item -LiteralPath $release -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $obj -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem -LiteralPath $dist -File -ErrorAction SilentlyContinue |
@@ -105,14 +112,18 @@ $compiler = Get-Compiler
 $output = Join-Path $release 'PotPlayerFrameClip.exe'
 $compilerArguments = @(
     '/nologo', '/target:winexe', '/platform:anycpu', '/optimize+', '/debug:pdbonly', '/codepage:65001',
+    '/main:PotPlayerFrameClip.Program',
     ('/win32manifest:' + (Join-Path $projectRoot 'app.manifest')),
     ('/out:' + $output),
     '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll',
     '/reference:System.Windows.Forms.dll', '/reference:System.Management.dll', '/reference:System.Xml.dll', '/reference:Microsoft.CSharp.dll',
     $generatedSource
 )
-& $compiler $compilerArguments
-if ($LASTEXITCODE -ne 0) { throw "Compilation failed with exit code $LASTEXITCODE." }
+$compilerArguments += @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src') -Filter '*.cs' -Recurse |
+    Where-Object { $_.FullName -ne $source } | ForEach-Object { $_.FullName })
+$compilerArguments += @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'assets\icons') -Filter '*.png' |
+    ForEach-Object { '/resource:' + $_.FullName + ',FrameClip.Icons.' + $_.Name })
+Invoke-FrameClipCompiler $compiler $compilerArguments
 
 if (-not $SkipTests) {
     & (Join-Path $PSScriptRoot 'verify.ps1') -ExecutablePath $output -ExpectedVersion $assemblyVersion
@@ -121,8 +132,13 @@ if (-not $SkipTests) {
 
 Copy-Item -LiteralPath (Join-Path $projectRoot 'app.config') -Destination (Join-Path $release 'PotPlayerFrameClip.exe.config')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'menu\FrameClipMenu.xml') -Destination $release
+Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\LUCIDE-LICENSE') -Destination $release
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install.ps1') -Destination $release
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $release
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'maintenance.ps1') -Destination $release
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'transaction.ps1') -Destination $release
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ffmpeg.ps1') -Destination $release
+Copy-Item -LiteralPath (Join-Path $projectRoot 'installer\ffmpeg-manifest.json') -Destination $release
 
 if ($SkipInstaller) {
     Get-FileHash -LiteralPath $output -Algorithm SHA256
@@ -130,11 +146,38 @@ if ($SkipInstaller) {
 }
 
 $iscc = Get-InnoCompiler
+$maintenance = Join-Path $release 'FrameClipMaintenance.exe'
+$maintenanceArguments = @('/main:PotPlayerFrameClip.MaintenanceProgram', ('/out:' + $maintenance))
+$maintenanceArguments += @($compilerArguments | Where-Object { $_ -notlike '/out:*' -and $_ -notlike '/main:*' })
+Invoke-FrameClipCompiler $compiler $maintenanceArguments
 & $iscc ("/DAppVersion={0}" -f $Version) $installerScript
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed with exit code $LASTEXITCODE." }
 
 $setup = Join-Path $dist ("PotPlayerFrameClip-v{0}-Setup.exe" -f $Version)
 if (-not (Test-Path -LiteralPath $setup)) { throw "Installer was not created: $setup" }
+$engine = Join-Path $dist ("PotPlayerFrameClip-v{0}-Engine.exe" -f $Version)
+Move-Item -LiteralPath $setup -Destination $engine -Force
+$wrapperArguments = @(('/out:' + $setup), ('/resource:' + $engine + ',FrameClip.SetupEngine'))
+$wrapperArguments += @($maintenanceArguments | Where-Object { $_ -notlike '/out:*' })
+Invoke-FrameClipCompiler $compiler $wrapperArguments
+Remove-Item -LiteralPath $engine -Force
 $hash = Get-FileHash -LiteralPath $setup -Algorithm SHA256
 [IO.File]::WriteAllText($setup + '.sha256', ($hash.Hash + '  ' + [IO.Path]::GetFileName($setup) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
 $hash
+
+if ($BundleFFmpeg) {
+    & (Join-Path $PSScriptRoot 'prepare-ffmpeg.ps1')
+    $bundle = Get-Content -LiteralPath (Join-Path $projectRoot 'installer\ffmpeg-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    & $iscc ("/DAppVersion={0}" -f $Version) /DBundledFFmpeg ("/DFFmpegVersion={0}" -f $bundle.version) ('/F' + "PotPlayerFrameClip-v$Version-Setup-Full") $installerScript
+    if ($LASTEXITCODE -ne 0) { throw 'Full offline installer compilation failed.' }
+    $fullSetup = Join-Path $dist "PotPlayerFrameClip-v$Version-Setup-Full.exe"
+    $fullEngine = Join-Path $dist "PotPlayerFrameClip-v$Version-Engine-Full.exe"
+    Move-Item -LiteralPath $fullSetup -Destination $fullEngine -Force
+    $fullArguments = @(('/out:' + $fullSetup), '/define:FRAMECLIP_BUNDLED_FFMPEG', ('/resource:' + $fullEngine + ',FrameClip.SetupEngine'))
+    $fullArguments += @($maintenanceArguments | Where-Object { $_ -notlike '/out:*' })
+    Invoke-FrameClipCompiler $compiler $fullArguments
+    Remove-Item -LiteralPath $fullEngine -Force
+    $fullHash = Get-FileHash -LiteralPath $fullSetup -Algorithm SHA256
+    [IO.File]::WriteAllText($fullSetup + '.sha256', ($fullHash.Hash + '  ' + [IO.Path]::GetFileName($fullSetup) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
+    $fullHash
+}

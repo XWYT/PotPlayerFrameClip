@@ -1,21 +1,56 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/banner-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/readme/banner-light.png">
+  <img alt="FrameClip: lossless stills, source-copy and precisely transcoded clips, with multiple HDR/SDR color spaces" src="assets/readme/banner-dark.png" width="1600" height="420">
+</picture>
+
 # PotPlayer FrameClip
 
-PotPlayer FrameClip is a context-menu extension for collecting reference frames and clips from PotPlayer. It captures high-precision stills for post-production and exports video segments with audio between marked in and out points. PotPlayer's built-in capture is intended mainly for viewing stills and offers limited support for HDR interpretation, 16-bit RGB output, and explicit import labeling, which can lead to incorrect gamma, gamut, or brightness judgments in grading and compositing workflows. FrameClip reads the media source directly, bypasses desktop capture and monitor tone mapping, creates 16-bit RGB PNG/TIFF files from the source color characteristics, and can retain the HDR original alongside a Rec.709 SDR companion. The same workflow also supports source-copy preservation, precise ProRes/DNxHR encoding, and automatic organization by title.
+**Film and television stills and clips, for professional reference and personal collections.**
+
+Collect color, lighting and tonal references for grading, organize shots for creative work, or keep favorite frames from films and series. FrameClip works from PotPlayer's context menu and reads the media source directly, without desktop capture or monitor tone mapping.
+
+Collect lossless stills in multiple formats, preserve original clips or make precise exports for editing, with support for multiple HDR/SDR color spaces.
+
+**Current version: 0.4.0 preview.** [Downloads and release notes](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.0) · [中文](README.md)
 
 ## Highlights
 
-- 16-bit RGB PNG or TIFF stills.
-- Optional 16-bit Rec.709 SDR companion image for PQ/HLG captures while retaining the original HDR still; disabled by default.
-- Source-copy MKV clips with video, optional audio, subtitles, chapters, and metadata.
-- Accurate ProRes or DNxHR clips with 24-bit PCM audio.
-- Automatic per-title `Images` and `Videos` organization with release-name matching.
-- SDR, HDR10/PQ, and HLG source labeling, with opt-in HDR-to-SDR tone mapping.
-- Simplified Chinese and English settings and PotPlayer extension menus.
-- Native skin-menu interaction: all nine actions run directly from PotPlayer's submenu, without an extra action popup, a third-level Misc menu, or a play/pause fallback.
-- 32-bit and 64-bit PotPlayer support, including portable installations.
-- Single-file per-user installer; FFmpeg remains an external dependency.
+- **Lossless stills:** capture directly from the media source in multiple image formats, with color information for reference and organization.
+- **HDR and SDR references:** support multiple HDR/SDR color spaces, retain HDR originals and optionally create SDR viewing copies.
+- **Clips for preservation or editing:** keep the original streams or export precise cuts in editing formats.
+- **Background processing:** capture stills during exports; track, cancel and retry concurrent jobs. GPU-preferred decoding preserves the requested output format and color pipeline.
+- **Per-title organization:** group images and clips by work, recognize episodes and common release names, and keep uncertain titles in stable unclassified folders.
+- **Native operation:** PotPlayer context-menu actions, Chinese/English UI, light/dark themes and multi-monitor notifications. Supports 32/64-bit and portable players, preserves custom menus and restores them during uninstall.
+
+Output locations, image format, transcoding presets, performance and notification placement are configurable. Accepted jobs keep their submitted source, range and settings.
+
+0.4.0 updates the native interface, task progress, concurrent exports, GPU-preferred processing and menu bridge. See [release notes](docs/releases/v0.4.0.md). Intel/AMD real-device checks, broader skin coverage, mixed-DPI interaction and long-duration acceptance remain open. The public installer is lightweight and does not include FFmpeg.
+
+## GPU Processing
+
+Settings > Performance > Video and screenshots provides GPU preferred (default)
+and CPU only. Hardware decoding reuses external FFmpeg and installed graphics
+drivers, with no bundled CUDA Toolkit. Capability-driven paths include CUDA,
+D3D11VA, Intel QSV and single-adapter DXVA2 fallback with per-adapter budgets.
+Intel/AMD policy tests are not real-device acceptance. Editing codecs, 16-bit PNG/TIFF and the
+reference color pipeline remain unchanged. Tasks report the actual backend;
+unsupported formats or insufficient estimated resources use CPU. Short tasks are
+not guaranteed to be faster. See [GPU processing](docs/gpu-processing.md) for
+open-source options, boundaries and local measurements. These features are included
+in the 0.4.0 preview; this is not a claim of universal GPU compatibility.
 
 ## Requirements
+
+### Installer And Offline Dependencies
+
+Install/update/uninstall share the native app controls. Start with Windows means auto-starting FrameClip when the Windows user signs in. Updates require idle tasks and a closed player; this is safe in-place replacement with backup/rollback, not hot rolling replacement.
+
+The lightweight Setup.exe supports an existing FFmpeg pair or configuration later. Setup-Full.exe additionally offers Not installed: use bundled FFmpeg, installing a private version under tools/ffmpeg/<version>/ without internet access, PATH changes or replacement of external tools. Capture/export need FFmpeg configured; installing the app does not require it. Configure later preserves existing paths on upgrades. Default uninstall keeps settings/history and all exported media.
+
+The bundled media tools require 64-bit Windows (32-bit PotPlayer on 64-bit Windows is supported). Use compatible external tools on 32-bit Windows. Full is a local development candidate, not a published download: corresponding-source/build-recipe and dependency-license archival remains a public-release gate.
+
+Build preparation: scripts/prepare-ffmpeg.ps1 -Download; then scripts/build.ps1 -Version 0.4.0 -BundleFFmpeg. Downloads are build-time only, pinned by installer/ffmpeg-manifest.json. Silent setup accepts /FFMPEGMODE=existing|bundled|later and /FFMPEGPATH for an existing pair. Lightweight setup rejects bundled mode before replacement.
 
 - Windows 10 or Windows 11
 - PotPlayer 32-bit or 64-bit
@@ -35,7 +70,7 @@ winget install --id Gyan.FFmpeg --exact --source winget --accept-package-agreeme
 Copy the complete prompt below and send it to an AI agent that can access the network, local files, and PowerShell:
 
 ```text
-Install the latest stable release of PotPlayer FrameClip on this Windows computer.
+Install the 0.4.0 preview release of PotPlayer FrameClip on this Windows computer. Tell me explicitly that it is a preview.
 
 Project URL: https://github.com/XWYT/PotPlayerFrameClip
 
@@ -51,10 +86,14 @@ Close PotPlayer before installing or upgrading. The native menu bridge remains l
 Silent installation:
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.3.2-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 ## Color handling
+
+Stills use 16-bit RGB PNG/TIFF. Source-copy clips use MKV; precise MOV exports support ProRes 422 HQ, 4444, 4444 XQ, DNxHR HQX and 444 with 24-bit PCM audio. PNG receives available color tags, filenames record color information, and source-copy retains compatible audio, video, subtitles and metadata.
+
+Lossless refers to PNG/TIFF compression and copying original encoded streams. Decoding, YCbCr-to-RGB conversion and the source itself still have precision limits; 16-bit output cannot restore detail already lost in the source. ProRes/DNxHR exports are transcodes, not lossless copies of the source stream.
 
 FrameClip converts the source YCbCr values of the original still to 16-bit RGB while retaining the encoded transfer characteristic. Assign that file's input color space in the destination application using the filename and source metadata. TIFF tag support varies by application; manual input assignment is recommended.
 
@@ -71,10 +110,10 @@ Dolby Vision sources without a reliable HDR10/HLG-compatible base layer are reje
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.3.2
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.0
 ```
 
-The release workflow uploads one asset: `PotPlayerFrameClip-v<version>-Setup.exe`.
+The release workflow prepares a draft containing the lightweight `PotPlayerFrameClip-v<version>-Setup.exe` and its `.sha256` file. It excludes Full installers. A reviewed preview release is published separately.
 
 ## Status and affiliation
 

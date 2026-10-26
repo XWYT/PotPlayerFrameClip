@@ -2,7 +2,9 @@
 param(
     [string]$PotPlayerDirectory,
     [string]$FFmpegPath,
+    [ValidateSet('existing','bundled','later')][string]$FFmpegMode = 'existing',
     [switch]$NoStartup,
+    [switch]$NoLaunch,
     [string]$InstallDirectory,
     [string]$DataDirectory,
     [switch]$TestMode,
@@ -10,6 +12,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'maintenance.ps1')
 $scriptPath = $MyInvocation.MyCommand.Path
 $productName = 'PotPlayer FrameClip'
 $appName = 'PotPlayerFrameClip'
@@ -23,6 +26,17 @@ if (-not $DataDirectory) { $DataDirectory = Join-Path $env:LOCALAPPDATA $appName
 $dataDirectory = [IO.Path]::GetFullPath($DataDirectory)
 $statePath = Join-Path $dataDirectory 'install-state.json'
 $pendingMenuPath = Join-Path $dataDirectory 'menu-selection.pending'
+Assert-FrameClipSafeDirectory $installDirectory
+Assert-FrameClipSafeDirectory $dataDirectory
+if (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'ffmpeg.ps1')) { . (Join-Path $PSScriptRoot 'ffmpeg.ps1') }
+if ($FFmpegMode -eq 'bundled') {
+    $bundle = Get-FrameClipFFmpegManifest
+    $FFmpegPath = Join-Path $installDirectory ('tools\ffmpeg\' + $bundle.version + '\ffmpeg.exe')
+    foreach ($name in $bundle.files) {
+        if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $FFmpegPath) $name) -PathType Leaf)) { throw "Bundled FFmpeg file missing: $name" }
+    }
+}
+if ($FFmpegMode -ne 'later' -and $FFmpegPath) { Assert-FrameClipFFmpegPair $FFmpegPath }
 $menuName = 'FrameClipMenu.xml'
 $legacyRunName = 'PotPlayer' + ([char]0x52) + 'esolveCapture'
 $legacyMenuName = ([char]0x52) + 'esolveCaptureMenu.xml'
@@ -188,7 +202,9 @@ function Restart-Elevated {
         '-Elevated'
     )
     if ($FFmpegPath) { $parts += '-FFmpegPath ' + (Quote-PowerShellLiteral $FFmpegPath) }
+    $parts += '-FFmpegMode ' + (Quote-PowerShellLiteral $FFmpegMode)
     if ($NoStartup) { $parts += '-NoStartup' }
+    if ($NoLaunch) { $parts += '-NoLaunch' }
     $command = $parts -join ' '
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
     $process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru `
@@ -398,15 +414,18 @@ $menuBaseName = if ($selectedMenuName -eq $menuName -and $originalPreviousMenuNa
 if (-not $TestMode -and (Test-PotPlayerRunning)) {
     throw 'PotPlayer is running. Close PotPlayer before installing or upgrading FrameClip because the native bridge remains loaded for the player process lifetime.'
 }
+if (-not $TestMode) { Stop-FrameClipForMaintenance $installDirectory $dataDirectory }
+Assert-FrameClipSafeDirectory $playerDirectory
 $menuPath = Install-Menu $playerDirectory $menuBaseName $menuLanguage
 
 New-Item -ItemType Directory -Force -Path $installDirectory | Out-Null
 New-Item -ItemType Directory -Force -Path $dataDirectory | Out-Null
-if (-not $TestMode) {
-    Get-Process -Name 'PotPlayerFrameClip','FrameClipBridgeHost32' -ErrorAction SilentlyContinue | Stop-Process -Force
-    Get-Process -Name $legacyRunName -ErrorAction SilentlyContinue | Stop-Process -Force
-}
 Copy-IfDifferent $sourceExe $installExe
+Copy-IfDifferent (Join-Path $releaseRoot 'maintenance.ps1') (Join-Path $installDirectory 'maintenance.ps1')
+foreach ($helper in @('ffmpeg.ps1','ffmpeg-manifest.json')) {
+    $helperSource = Join-Path $releaseRoot $helper
+    if (Test-Path -LiteralPath $helperSource) { Copy-IfDifferent $helperSource (Join-Path $installDirectory $helper) }
+}
 if (Test-Path -LiteralPath (Join-Path $releaseRoot 'PotPlayerFrameClip.exe.config')) {
     Copy-IfDifferent (Join-Path $releaseRoot 'PotPlayerFrameClip.exe.config') ($installExe + '.config')
 }
@@ -437,7 +456,7 @@ if (-not $values.Contains('VideoPreset')) { $values.VideoPreset = 'prores422hq' 
 if (-not $values.Contains('ExportRec709ForHdr')) { $values.ExportRec709ForHdr = 'False' }
 if (-not $values.Contains('Language')) { $values.Language = 'zh-CN' }
 $values.PotPlayerMenuPath = $menuPath
-if ($FFmpegPath) {
+if ($FFmpegPath -and $FFmpegMode -ne 'later') {
     if (-not (Test-Path -LiteralPath $FFmpegPath)) { throw "FFmpeg was not found at $FFmpegPath" }
     $probe = Join-Path (Split-Path -Parent $FFmpegPath) 'ffprobe.exe'
     $values.FFmpeg = [IO.Path]::GetFullPath($FFmpegPath)
@@ -497,5 +516,5 @@ if (-not $TestMode) {
     PreviousMenuValueExists = [bool]$menuConfiguration.PreviousExists
 } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
 
-if (-not $TestMode) { Start-FrameClipHelper }
+if (-not $TestMode -and -not $NoLaunch) { Start-FrameClipHelper }
 Write-Host "$productName installed. Restart PotPlayer once if the menu is already open."

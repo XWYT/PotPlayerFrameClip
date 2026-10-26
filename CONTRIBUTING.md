@@ -9,4 +9,6 @@ Keep changes focused and preserve these behavioral contracts:
 - Fixed drive letters and machine-specific installation paths are not allowed.
 - PowerShell files containing Chinese text must remain UTF-8 with BOM for Windows PowerShell 5.1 compatibility.
 
-Run `scripts\build.ps1 -Version <major.minor.patch>` before submitting a change. A release must upload only the versioned Setup EXE; `dist\release` and `dist\obj` are build staging directories.
+Run `scripts\build.ps1 -Version <major.minor.patch>` before submitting a change. UI regressions run on a separate non-input desktop; do not remove that isolation or fall back to showing test windows on the user's desktop.
+
+A public release includes the versioned lightweight Setup EXE and its SHA-256 file. Full installers remain blocked until their exact corresponding sources, build recipes and dependency notices are archived. `dist\release` and `dist\obj` are build staging directories, not release assets.

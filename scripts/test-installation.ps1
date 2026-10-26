@@ -34,6 +34,9 @@ try {
     Copy-Item -LiteralPath (Join-Path $projectRoot 'menu\FrameClipMenu.xml') -Destination (Join-Path $stageDirectory 'FrameClipMenu.xml')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install.ps1') -Destination $stageDirectory
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $stageDirectory
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'maintenance.ps1') -Destination $stageDirectory
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ffmpeg.ps1') -Destination $stageDirectory
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'installer\ffmpeg-manifest.json') -Destination $stageDirectory
 
     $customMenu = @'
 <?xml version="1.0" encoding="utf-8"?>

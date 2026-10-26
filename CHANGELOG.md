@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.0 Preview - 2026-10-27
+
+### Interface And Jobs
+
+- Replace the settings window, task center and status strip with shared lightweight native controls, custom window chrome, light/dark themes and reduced-motion support. No web runtime is added.
+- Add real FFmpeg progress, cancellation, retry and persistent task history. Accepted jobs retain their source, time range and settings.
+- Default to two concurrent video jobs and an independent screenshot lane, with a playback-first resource policy.
+- Add multi-monitor notification placement, four spatial corner targets and a draggable custom-position preview.
+- Fix tray-menu disposal errors and refine saving feedback, button alignment and DPI layout.
+- Run UI regression windows on a separate non-input Windows desktop. Maximization, popup and placement tests no longer flash test controls on the user's desktop; failure to isolate stops the tests. This helper is test-only.
+
+### Menu Reliability
+
+- Keep actions in the native PotPlayer submenu. Pump hook ownership on a message-loop thread and require target-process acknowledgement before treating the bridge as ready.
+- Bound bridge retries, preserve unrelated player commands, handle long-open menus and clear action state before dispatch to prevent duplicate commands.
+- Add separate-process x86/x64 hook bootstrap, reattachment and nine-action regression tests at 100/150/200% scaling.
+
+### Install And Maintenance
+
+- Unify install, upgrade and uninstall controls with the main program. Add graceful maintenance handoff, transactional backup/rollback and optional data removal.
+- Allow installation without FFmpeg; captures/exports remain unavailable until a compatible FFmpeg/FFprobe pair is configured. Existing dependency paths are preserved on upgrade.
+- Add a local Full offline build option. It is not publicly distributed until corresponding-source and third-party-license archival is complete.
+
+### GPU Processing
+
+- Add a persisted GPU-preferred / CPU-only processing setting, defaulting to GPU preferred, with immutable accepted-job settings.
+- Reuse FFmpeg CUDA/NVDEC and D3D11VA hardware decoding without bundling additional runtimes or substituting editing codecs.
+- Add capacity-scaled FIFO GPU video admission, an independent screenshot lane, bounded hardware-initialization failure caching and truthful CPU fallback.
+- Preserve the reference color/encoding pipeline and report actual processing backends in task rows, detail and persisted history.
+- Add hardware/CPU pixel and metadata regression tests, all editing presets, and a repeatable two-video-plus-image benchmark.
+- Extend capability-driven decoding to Intel QSV and single-adapter DXVA2, with explicit hybrid adapter binding, per-adapter budgets, UMA capacity estimates and isolated failure caches.
+- Retain CPU exports when optional GPU enumeration fails; exclude AV1 grain/unknown grain state from unvalidated hardware synthesis.
+- Exercise VP9/AV1 8/10-bit CUDA/D3D11VA/DXVA2 pixel fidelity on the NVIDIA host; retain Intel/AMD real-device gates.
+- Trial existing FFmpeg libplacebo/Vulkan without bundling it; do not enable a slower short-job path with different reference tone-map results.
+
+Preview scope: local installation, real player-menu checks and automated regression tests pass on the NVIDIA development host. Intel/AMD real-device, broader skin, mixed-DPI and long-duration acceptance remain open; backend policy tests are not substitutes for those checks. The public release contains only the lightweight installer and its SHA-256 file.
+
 ## 0.3.3 - 2026-08-24
 
 - 原生菜单桥接只拦截 FrameClip 使用的 `ID_APP_ABOUT` 占位命令；其他 PotPlayer 子菜单命令会继续交还播放器处理，不再被错误映射为 FrameClip 动作。

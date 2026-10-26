@@ -25,6 +25,7 @@ static HWND g_action_menu;
 static DWORD g_session_started;
 static DWORD g_pending_until;
 static int g_pending_action = -1;
+static UINT g_initialize_message;
 
 static const UINT_PTR FRAMECLIP_SUBCLASS_ID = 0x46434C50u;
 static const DWORD MENU_SESSION_MS = 10000;
@@ -32,6 +33,8 @@ static const DWORD COMMAND_WINDOW_MS = 1000;
 static const UINT FRAMECLIP_PLACEHOLDER_COMMAND = 0xE140u; /* ID_APP_ABOUT */
 static const UINT FRAMECLIP_ACTION_MESSAGE = WM_APP + 0x4C0;
 static const wchar_t *FRAMECLIP_MESSAGE_WINDOW = L"PotPlayerFrameClip.NativeBridge";
+static const wchar_t *FRAMECLIP_INITIALIZE_MESSAGE = L"PotPlayerFrameClip.NativeBridge.Initialize.v1";
+static const wchar_t *FRAMECLIP_OWNER_PROPERTY = L"PotPlayerFrameClip.NativeBridge.Owner.v1";
 
 static const wchar_t *g_action_arguments[] = {
     L"--capture",
@@ -48,6 +51,12 @@ static const wchar_t *g_action_arguments[] = {
 static BOOL TickIsCurrent(DWORD now, DWORD deadline)
 {
     return (LONG)(deadline - now) >= 0;
+}
+
+static BOOL IsMenuSessionCurrent(DWORD now)
+{
+    return g_main_window && (TickIsCurrent(now, g_session_started + MENU_SESSION_MS) ||
+        (g_root_menu && IsWindow(g_root_menu) && IsWindowVisible(g_root_menu)));
 }
 
 /*
@@ -84,8 +93,10 @@ static void WriteBridgeLog(const wchar_t *message, int value)
     DWORD written;
     HANDLE file;
 
-    if (!GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH)) return;
-    wsprintfW(directory, L"%s\\PotPlayerFrameClip", local_app_data);
+    if (!GetEnvironmentVariableW(L"FRAMECLIP_DATA_DIRECTORY", directory, MAX_PATH)) {
+        if (!GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH)) return;
+        wsprintfW(directory, L"%s\\PotPlayerFrameClip", local_app_data);
+    }
     CreateDirectoryW(directory, NULL);
     wsprintfW(path, L"%s\\bridge-debug.log", directory);
     GetLocalTime(&time);
@@ -144,8 +155,12 @@ static BOOL CALLBACK FindFrameClipReceiverCallback(HWND window, LPARAM parameter
 {
     wchar_t caption[128];
     HWND *receiver = (HWND *)parameter;
+    DWORD process_id;
+    DWORD owner = (DWORD)(DWORD_PTR)GetPropW(g_main_window, FRAMECLIP_OWNER_PROPERTY);
 
     if (!receiver || *receiver) return FALSE;
+    GetWindowThreadProcessId(window, &process_id);
+    if (!owner || process_id != owner) return TRUE;
     if (!GetWindowTextW(window, caption, (int)(sizeof(caption) / sizeof(caption[0])))) return TRUE;
     if (wcscmp(caption, FRAMECLIP_MESSAGE_WINDOW) != 0) return TRUE;
     *receiver = window;
@@ -212,8 +227,6 @@ static LRESULT CALLBACK FrameClipSubclassProc(
     if (message == WM_COMMAND && g_pending_action >= 0) {
         int action = g_pending_action;
         BOOL current = TickIsCurrent(now, g_pending_until);
-        g_pending_action = -1;
-        g_pending_until = 0;
 
         /*
          * 自绘菜单窗口没有稳定的类名或可访问标题，其他 PotPlayer 二级菜单也可能
@@ -221,10 +234,13 @@ static LRESULT CALLBACK FrameClipSubclassProc(
          * WM_COMMAND；其他命令必须原样交还播放器。
          */
         if (!current || HIWORD(w_param) != 0 || LOWORD(w_param) != FRAMECLIP_PLACEHOLDER_COMMAND || l_param != 0) {
+            if (!current) { g_pending_action = -1; g_pending_until = 0; }
             WriteBridgeLog(L"ignored-command", LOWORD(w_param));
             return DefSubclassProc(window, message, w_param, l_param);
         }
 
+        g_pending_action = -1;
+        g_pending_until = 0;
         PostMessageW(window, WM_CANCELMODE, 0, 0);
         WriteBridgeLog(L"intercept-command", LOWORD(w_param));
         LaunchFrameClipAction(action);
@@ -232,6 +248,7 @@ static LRESULT CALLBACK FrameClipSubclassProc(
     }
 
     if (message == WM_NCDESTROY) {
+        RemovePropW(window, FRAMECLIP_OWNER_PROPERTY);
         RemoveWindowSubclass(window, FrameClipSubclassProc, FRAMECLIP_SUBCLASS_ID);
         if (window == g_main_window) g_main_window = NULL;
         if (window == g_root_menu) g_root_menu = NULL;
@@ -245,6 +262,33 @@ static void EnsureSubclass(HWND window)
     if (window) SetWindowSubclass(window, FrameClipSubclassProc, FRAMECLIP_SUBCLASS_ID, 0);
 }
 
+/* A queued, registered message proves that this DLL ran on the player UI thread.
+ * The hook owner must keep a message loop alive; a nonzero hook handle is not proof.
+ */
+__declspec(dllexport) LRESULT CALLBACK FrameClipGetMessageProc(int code, WPARAM w_param, LPARAM l_param)
+{
+    MSG *message;
+    DWORD process_id;
+    if (code != HC_ACTION || w_param != PM_REMOVE || !l_param)
+        return CallNextHookEx(NULL, code, w_param, l_param);
+    if (!g_initialize_message) g_initialize_message = RegisterWindowMessageW(FRAMECLIP_INITIALIZE_MESSAGE);
+    message = (MSG *)l_param;
+    if (g_initialize_message && message->message == g_initialize_message && message->hwnd &&
+        message->wParam && message->lParam == 0 &&
+        GetWindowThreadProcessId(message->hwnd, &process_id) == GetCurrentThreadId() &&
+        process_id == GetCurrentProcessId()) {
+        PinBridgeModule();
+        g_main_window = message->hwnd;
+        if (SetWindowSubclass(g_main_window, FrameClipSubclassProc, FRAMECLIP_SUBCLASS_ID, 0) &&
+            SetPropW(g_main_window, FRAMECLIP_OWNER_PROPERTY, (HANDLE)message->wParam))
+            WriteBridgeLog(L"bridge-ready", (int)message->wParam);
+        message->message = WM_NULL;
+        message->wParam = 0;
+        message->lParam = 0;
+    }
+    return CallNextHookEx(NULL, code, w_param, l_param);
+}
+
 __declspec(dllexport) LRESULT CALLBACK FrameClipMouseProc(int code, WPARAM w_param, LPARAM l_param)
 {
     MOUSEHOOKSTRUCT *mouse;
@@ -252,13 +296,20 @@ __declspec(dllexport) LRESULT CALLBACK FrameClipMouseProc(int code, WPARAM w_par
     HWND root;
     HWND point_window;
     HWND target_window;
+    DWORD process_id;
 
-    if (code < 0 || !l_param) return CallNextHookEx(NULL, code, w_param, l_param);
+    if (code != HC_ACTION || !l_param) return CallNextHookEx(NULL, code, w_param, l_param);
+    if (w_param != WM_RBUTTONDOWN && w_param != WM_LBUTTONDOWN && w_param != WM_MOUSEMOVE)
+        return CallNextHookEx(NULL, code, w_param, l_param);
     mouse = (MOUSEHOOKSTRUCT *)l_param;
+    if (!mouse->hwnd || GetWindowThreadProcessId(mouse->hwnd, &process_id) != GetCurrentThreadId() ||
+        process_id != GetCurrentProcessId()) return CallNextHookEx(NULL, code, w_param, l_param);
+    if (w_param == WM_MOUSEMOVE && !IsMenuSessionCurrent(GetTickCount()))
+        return CallNextHookEx(NULL, code, w_param, l_param);
     PinBridgeModule();
     now = GetTickCount();
-    point_window = WindowFromPoint(mouse->pt);
-    if (!point_window) point_window = mouse->hwnd;
+    /* WH_MOUSE already supplies the receiving window on this UI thread. */
+    point_window = mouse->hwnd;
     target_window = GetAncestor(point_window, GA_ROOT);
     if (!target_window) target_window = point_window;
 
@@ -268,7 +319,8 @@ __declspec(dllexport) LRESULT CALLBACK FrameClipMouseProc(int code, WPARAM w_par
         EnsureSubclass(g_main_window);
         ResetMenuSession();
         WriteBridgeLog(L"session-start", 0);
-    } else if (g_main_window && TickIsCurrent(now, g_session_started + MENU_SESSION_MS)) {
+    } else if (IsMenuSessionCurrent(now)) {
+        g_session_started = now;
         if (IsMenuCandidate(target_window)) {
             EnsureSubclass(target_window);
             if (!g_root_menu) {
@@ -281,6 +333,8 @@ __declspec(dllexport) LRESULT CALLBACK FrameClipMouseProc(int code, WPARAM w_par
         }
 
         if (w_param == WM_LBUTTONDOWN) {
+            g_pending_action = -1;
+            g_pending_until = 0;
             if (target_window == g_action_menu) {
                 POINT point = mouse->pt;
                 int action;

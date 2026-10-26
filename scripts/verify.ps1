@@ -5,6 +5,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'compiler.ps1')
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $projectRoot 'src\PotPlayerFrameClip.cs'
 $menuPath = Join-Path $projectRoot 'menu\FrameClipMenu.xml'
@@ -45,8 +46,8 @@ Assert-True ($sourceText.Contains('[RememberFiles]') -and $sourceText.Contains('
 Assert-True ($sourceText.Contains('FindExistingWorkDirectory(root, derivedTitle, episodicSource)')) 'Derived and unclassified titles are not reused across captures.'
 Assert-True ($sourceText.Contains('ToastForm previousToast = activeToast;') -and $sourceText.Contains('previousToast.Dispose();')) 'Toast replacement still risks clearing the active field during FormClosed.'
 Assert-True ($sourceText.Contains('ControlStyles.OptimizedDoubleBuffer') -and $sourceText.Contains('protected override void OnPaint(PaintEventArgs') -and `
-    $sourceText.Contains('while (engine.IsBusy || engine.HasActiveToast)') -and -not $sourceText.Contains('Label titleLabel = new Label();')) `
-    'Toast rendering still depends on child controls or a short-lived one-shot message loop.'
+    $sourceText.Contains('ResidentIpc.Forward(requestedAction)') -and -not $sourceText.Contains('Label titleLabel = new Label();')) `
+    'Feedback rendering or single-resident command forwarding is incomplete.'
 Assert-True ($sourceText.Contains('ExportRec709ForHdr') -and $sourceText.Contains('tonemap=mobius') -and $sourceText.Contains('format=gbrpf32le')) `
     'Optional HDR to Rec.709 companion output is incomplete.'
 Assert-True ($sourceText.Contains('ReadToEndAsync()') -and $sourceText.Contains('WaitForExit(timeout)') -and `
@@ -109,6 +110,12 @@ Assert-True ($nativeSource.Contains('FRAMECLIP_PLACEHOLDER_COMMAND') -and $nativ
 Assert-True ($nativeSource.Contains('GET_MODULE_HANDLE_EX_FLAG_PIN') -and $installerText.Contains('if IsPotPlayerRunning() then')) `
     'The injected bridge can still unload beneath a live PotPlayer window subclass.'
 Assert-True (-not ($nativeSource -match '[A-Za-z]:\\')) 'A fixed Windows path remains in the native bridge.'
+Assert-True ($nativeSource.Contains('FrameClipGetMessageProc') -and $nativeSource.Contains('PM_REMOVE') -and
+    $nativeSource.Contains('code != HC_ACTION') -and $nativeSource.Contains('FRAMECLIP_OWNER_PROPERTY')) 'Native hook readiness or mouse deduplication is missing.'
+Assert-True ($sourceText.Contains('System.Windows.Forms.Timer refreshTimer') -and
+    $sourceText.Contains('native-bridge64-ready') -and $sourceText.Contains('existing.NextProbe')) 'Hook ownership needs a pumped thread and bounded readiness retries.'
+
+& (Join-Path $PSScriptRoot 'test-native-bridge.ps1') -ReleaseDirectory $releaseDirectory
 
 Assert-True (Test-Path -LiteralPath $ExecutablePath) 'Compiled executable is missing.'
 $versionInfo = (Get-Item -LiteralPath $ExecutablePath).VersionInfo
@@ -124,12 +131,14 @@ $compiler = @(
 Assert-True ([bool]$compiler) '.NET Framework compiler is unavailable for tests.'
 $testExe = Join-Path $env:TEMP ("FrameClipTests-{0}.exe" -f [Guid]::NewGuid().ToString('N'))
 try {
-    & $compiler /nologo /target:exe /platform:anycpu /optimize+ /codepage:65001 `
-        /main:PotPlayerFrameClip.Tests /out:$testExe `
-        /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll `
-        /reference:System.Windows.Forms.dll /reference:System.Management.dll /reference:System.Xml.dll /reference:Microsoft.CSharp.dll `
-        $source (Join-Path $projectRoot 'tests\Tests.cs')
-    if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed.' }
+    $testArguments = @('/nologo', '/target:exe', '/platform:anycpu', '/optimize+', '/codepage:65001',
+        '/main:PotPlayerFrameClip.Tests', ('/out:' + $testExe), '/reference:System.dll', '/reference:System.Core.dll',
+        '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll', '/reference:System.Management.dll',
+        '/reference:System.Xml.dll', '/reference:Microsoft.CSharp.dll')
+    $testArguments += @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src') -Filter '*.cs' -Recurse | ForEach-Object FullName)
+    $testArguments += @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Filter '*.cs' | ForEach-Object FullName)
+    $testArguments += @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'assets\icons') -Filter '*.png' | ForEach-Object { '/resource:' + $_.FullName + ',FrameClip.Icons.' + $_.Name })
+    Invoke-FrameClipCompiler $compiler $testArguments
     & $testExe
     if ($LASTEXITCODE -ne 0) { throw "Tests failed with exit code $LASTEXITCODE." }
 }

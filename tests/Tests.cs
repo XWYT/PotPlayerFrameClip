@@ -18,8 +18,14 @@ namespace PotPlayerFrameClip
             failures++;
         }
 
-        public static int Main()
+        [STAThread]
+        public static int Main(string[] args)
         {
+            if (args.Contains("-hwaccels") || args.Contains("-decoders")) return GpuTests.CapabilityFixture(args);
+            if (Array.IndexOf(args, "--frameclip-gpu-fixture") >= 0) return GpuTests.ProcessFixture(args);
+            TestDesktop.Initialize();
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
             Check(AppPaths.ConfigPath.StartsWith(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 StringComparison.OrdinalIgnoreCase), "Config must be stored under LocalAppData.");
@@ -202,6 +208,7 @@ namespace PotPlayerFrameClip
                 try { Directory.Delete(mediaDirectory, true); }
                 catch { }
             }
+            failures += JobTests.Run();
             return failures == 0 ? 0 : 1;
         }
     }

@@ -20,8 +20,8 @@ using System.Xml;
 [assembly: AssemblyDescription("Frame and source clip capture extension for PotPlayer")]
 [assembly: AssemblyProduct("PotPlayer FrameClip")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 PotPlayer FrameClip contributors")]
-[assembly: AssemblyVersion("0.3.3.0")]
-[assembly: AssemblyFileVersion("0.3.3.0")]
+[assembly: AssemblyVersion("0.4.0.0")]
+[assembly: AssemblyFileVersion("0.4.0.0")]
 
 namespace PotPlayerFrameClip
 {
@@ -32,6 +32,8 @@ namespace PotPlayerFrameClip
         {
             get
             {
+                string isolated = Environment.GetEnvironmentVariable("FRAMECLIP_DATA_DIRECTORY");
+                if (!String.IsNullOrWhiteSpace(isolated) && Path.IsPathRooted(isolated)) return isolated;
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "PotPlayerFrameClip");
@@ -83,6 +85,7 @@ namespace PotPlayerFrameClip
 
         internal static void MigrateLegacyData()
         {
+            if (!String.IsNullOrEmpty(Environment.GetEnvironmentVariable("FRAMECLIP_DATA_DIRECTORY"))) return;
             string legacyName = "PotPlayer" + "\u0052esolveCapture";
             string legacyDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -303,6 +306,7 @@ namespace PotPlayerFrameClip
     {
         internal const int WH_MOUSE_LL = 14;
         internal const int WH_MOUSE = 7;
+        internal const int WH_GETMESSAGE = 3;
         internal const int WM_MOUSEMOVE = 0x0200;
         internal const int WM_RBUTTONDOWN = 0x0204;
         internal const int WM_RBUTTONUP = 0x0205;
@@ -399,6 +403,12 @@ namespace PotPlayerFrameClip
 
         [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
         internal static extern IntPtr SetWindowsHookExNative(int hookId, IntPtr callback, IntPtr module, uint threadId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        internal static extern uint RegisterWindowMessage(string name);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        internal static extern IntPtr GetProp(IntPtr window, string name);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -757,18 +767,42 @@ namespace PotPlayerFrameClip
         internal bool ExportRec709ForHdr;
         internal string Language = UiText.Chinese;
         internal string PotPlayerMenuPath = String.Empty;
+        internal string ResourceMode = "quiet";
+        internal int MaxVideoJobs = 2;
+        internal string Theme = "system";
+        internal string NotificationMode = "compact";
+        internal string NotificationPosition = "bottom-right";
+        internal string NotificationMonitor = String.Empty;
+        internal double NotificationX = 1, NotificationY = 1;
+        internal bool ReducedMotion;
+        internal bool LowerBackgroundPriority = true;
+        internal string ProcessingDevice = "gpu";
+
+        internal AppConfig Copy() { return (AppConfig)MemberwiseClone(); }
+        internal void NormalizeJobs()
+        {
+            if (ProcessingDevice != "gpu" && ProcessingDevice != "cpu") ProcessingDevice = "gpu";
+            if (ResourceMode != "quiet" && ResourceMode != "balanced" && ResourceMode != "fast") ResourceMode = "quiet";
+            MaxVideoJobs = Math.Max(1, Math.Min(4, MaxVideoJobs));
+            if (Theme != "system" && Theme != "dark" && Theme != "light") Theme = "system";
+            if (NotificationMode != "compact" && NotificationMode != "tray" && NotificationMode != "pinned") NotificationMode = "compact";
+            if (NotificationPosition != "top-left" && NotificationPosition != "top-right" && NotificationPosition != "bottom-left" && NotificationPosition != "bottom-right" && NotificationPosition != "custom") NotificationPosition = "bottom-right";
+            NotificationMonitor = (NotificationMonitor ?? String.Empty).Replace("\r", "").Replace("\n", "");
+            NotificationX = Double.IsNaN(NotificationX) || Double.IsInfinity(NotificationX) ? 1 : Math.Max(0, Math.Min(1, NotificationX));
+            NotificationY = Double.IsNaN(NotificationY) || Double.IsInfinity(NotificationY) ? 1 : Math.Max(0, Math.Min(1, NotificationY));
+        }
 
         internal static string ConfigPath
         {
             get { return AppPaths.ConfigPath; }
         }
 
-        internal static AppConfig Load()
+        internal static AppConfig Load(bool migrateLegacy = true)
         {
             AppConfig config = new AppConfig();
             string path = ConfigPath;
             bool legacyConfig = false;
-            if (!File.Exists(path))
+            if (!File.Exists(path) && String.IsNullOrEmpty(Environment.GetEnvironmentVariable("FRAMECLIP_DATA_DIRECTORY")))
             {
                 foreach (string candidate in AppPaths.LegacyConfigCandidates())
                 {
@@ -809,12 +843,27 @@ namespace PotPlayerFrameClip
                 }
                 if (key.Equals("Language", StringComparison.OrdinalIgnoreCase)) config.Language = value;
                 if (key.Equals("PotPlayerMenuPath", StringComparison.OrdinalIgnoreCase)) config.PotPlayerMenuPath = value;
+                if (key == "ResourceMode") config.ResourceMode = value;
+                if (key == "ProcessingDevice") config.ProcessingDevice = value;
+                if (key == "Theme") config.Theme = value;
+                if (key == "NotificationMode") config.NotificationMode = value;
+                if (key == "NotificationPosition") config.NotificationPosition = value;
+                if (key == "NotificationMonitor") config.NotificationMonitor = value;
+                double coordinate;
+                if (key == "NotificationX" && Double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out coordinate)) config.NotificationX = coordinate;
+                if (key == "NotificationY" && Double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out coordinate)) config.NotificationY = coordinate;
+                int jobs;
+                if (key == "MaxVideoJobs" && Int32.TryParse(value, out jobs)) config.MaxVideoJobs = jobs;
+                bool reduced;
+                if (key == "ReducedMotion" && Boolean.TryParse(value, out reduced)) config.ReducedMotion = reduced;
+                if (key == "LowerBackgroundPriority" && Boolean.TryParse(value, out reduced)) config.LowerBackgroundPriority = reduced;
             }
             config.ImageFormat = CaptureFormats.NormalizeImageFormat(config.ImageFormat);
             config.VideoPreset = CaptureFormats.NormalizeVideoPreset(config.VideoPreset);
             config.Language = UiText.NormalizeLanguage(config.Language);
+            config.NormalizeJobs();
             config.LocateTools();
-            if (legacyConfig)
+            if (legacyConfig && migrateLegacy)
             {
                 try { config.Save(); }
                 catch { }
@@ -842,7 +891,13 @@ namespace PotPlayerFrameClip
                 "FFprobe=" + FfprobePath,
                 "ExportRec709ForHdr=" + ExportRec709ForHdr.ToString(),
                 "Language=" + UiText.NormalizeLanguage(Language),
-                "PotPlayerMenuPath=" + PotPlayerMenuPath
+                "PotPlayerMenuPath=" + PotPlayerMenuPath,
+                "ResourceMode=" + ResourceMode, "MaxVideoJobs=" + MaxVideoJobs.ToString(CultureInfo.InvariantCulture),
+                "Theme=" + Theme, "NotificationMode=" + NotificationMode, "ReducedMotion=" + ReducedMotion,
+                "NotificationPosition=" + NotificationPosition, "NotificationMonitor=" + NotificationMonitor,
+                "NotificationX=" + NotificationX.ToString("R", CultureInfo.InvariantCulture), "NotificationY=" + NotificationY.ToString("R", CultureInfo.InvariantCulture),
+                "LowerBackgroundPriority=" + LowerBackgroundPriority,
+                "ProcessingDevice=" + ProcessingDevice
             };
             string temporary = ConfigPath + ".tmp";
             File.WriteAllLines(temporary, lines, new UTF8Encoding(false));
@@ -899,7 +954,7 @@ namespace PotPlayerFrameClip
             @"(?ix)^(?:s(?:eason)?[\s._\-]*\d{1,3}|第[0-9一二三四五六七八九十百]+季)(?:[\s._\-]*(?:4k|8k|uhd|hdr10\+?|hdr|dovi|dv|sdr|2160p|1080p))*$",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly object AliasFileLock = new object();
-        private static readonly string AliasFilePath = Path.Combine(AppPaths.DataDirectory, "library-aliases.tsv");
+        private static string AliasFilePath { get { return Path.Combine(AppPaths.DataDirectory, "library-aliases.tsv"); } }
 
         internal static MediaOutputPaths GetPaths(string rootDirectory, string sourcePath, string embeddedTitle, bool embeddedTitleIsSeries)
         {
@@ -1685,6 +1740,8 @@ namespace PotPlayerFrameClip
         internal string ColorPrimaries = "unknown";
         internal string ColorRange = "unknown";
         internal string PixelFormat = "unknown";
+        internal string Codec = "unknown";
+        internal bool? HasFilmGrain;
         internal string EmbeddedTitle = String.Empty;
         internal bool EmbeddedTitleIsSeries;
         internal bool MetadataAssumed;
@@ -1717,7 +1774,7 @@ namespace PotPlayerFrameClip
         }
     }
 
-    internal sealed class SettingsForm : Form
+    internal sealed class LegacySettingsForm : Form
     {
         private readonly AppConfig config;
         private readonly string displayLanguage;
@@ -1731,7 +1788,7 @@ namespace PotPlayerFrameClip
         internal bool LanguageChanged { get; private set; }
         internal bool MenuLanguageApplied { get; private set; }
 
-        internal SettingsForm(AppConfig config)
+        internal LegacySettingsForm(AppConfig config)
         {
             this.config = config;
             displayLanguage = UiText.NormalizeLanguage(config.Language);
@@ -2037,23 +2094,62 @@ namespace PotPlayerFrameClip
         }
     }
 
-    internal sealed class CaptureEngine
+    internal sealed partial class CaptureEngine : IDisposable
     {
         private readonly AppConfig config;
         private readonly Control dispatcher;
-        private int busy;
         private int settingsOpen;
         private ToastForm activeToast;
+        private readonly MediaJob job;
+        private readonly WorkerResources resources;
+        internal readonly JobCoordinator Jobs;
+        private readonly QuietDesktop desktop;
+        internal event Action ExitRequested;
+        internal string LastSubmissionResult;
 
         internal CaptureEngine(AppConfig config, Control dispatcher)
         {
             this.config = config;
             this.dispatcher = dispatcher;
+            if (dispatcher != null)
+            {
+                Jobs = new JobCoordinator(config, RunJob, AppPaths.DataDirectory);
+                resources = Jobs.Resources;
+                desktop = new QuietDesktop(config, this, dispatcher);
+            }
         }
+
+        private CaptureEngine(AppConfig config, Control dispatcher, MediaJob job, WorkerResources resources)
+        { this.config = config; this.dispatcher = dispatcher; this.job = job; this.resources = resources; }
+
+        private void RunJob(MediaJob item)
+        {
+            CaptureEngine worker = new CaptureEngine(item.Request.Settings, dispatcher, item, resources);
+            if (item.Request.Action == CaptureAction.CaptureFrame) worker.CaptureCurrentFrame();
+            else if (item.Request.Action == CaptureAction.ExportOriginal) worker.ExportOriginalRange();
+            else worker.ExportPreciseRange();
+        }
+        internal void OpenTasks() { if (desktop != null) desktop.OpenTasks(); }
+        internal void OpenSettings() { ShowSettings(); }
+        internal bool StopForMaintenance()
+        {
+            if (Jobs != null && !Jobs.TryBeginMaintenance()) return false;
+            if (dispatcher != null) dispatcher.BeginInvoke(new Action(delegate { Action exit = ExitRequested; if (exit != null) exit(); }));
+            return true;
+        }
+        internal void Quit()
+        {
+            if (Jobs == null || !Jobs.Busy) { Action exit = ExitRequested; if (exit != null) exit(); return; }
+            DialogResult answer = MessageBox.Show(T("仍有任务。是：完成队列后退出；否：取消任务后退出；取消：继续工作。", "Jobs remain. Yes: finish queue then quit. No: cancel all and quit. Cancel: keep working."), "FrameClip", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (answer == DialogResult.Cancel) return;
+            Jobs.Drained += delegate { dispatcher.BeginInvoke(new Action(delegate { Action exit = ExitRequested; if (exit != null) exit(); })); };
+            if (answer == DialogResult.Yes) Jobs.DrainAndExit(); else Jobs.CancelAll();
+        }
+        public void Dispose() { if (desktop != null) desktop.Dispose(); if (Jobs != null) Jobs.Dispose(); }
 
         internal bool IsBusy
         {
-            get { return Thread.VolatileRead(ref busy) != 0; }
+            get { return Jobs != null && Jobs.Busy; }
         }
 
         internal bool HasActiveToast
@@ -2073,6 +2169,7 @@ namespace PotPlayerFrameClip
 
         internal void Execute(CaptureAction action)
         {
+            LastSubmissionResult = "ok";
             if (action == CaptureAction.Settings)
             {
                 ShowSettings();
@@ -2109,34 +2206,37 @@ namespace PotPlayerFrameClip
                 return;
             }
 
-            if (Interlocked.CompareExchange(ref busy, 1, 0) != 0)
+            try
             {
-                ShowToast(MenuTitle, T("已有导出任务正在运行。", "Another export task is already running."), 3000);
-                return;
+                config.LocateTools();
+                string source;
+                long start, end;
+                if (action == CaptureAction.CaptureFrame)
+                {
+                    IntPtr player = FindPotPlayerWindow();
+                    string titleBefore = GetWindowTitle(player);
+                    start = GetCurrentMilliseconds(player);
+                    source = GetCurrentSource(player);
+                    string error = GetPlaybackReadError(player, source, start);
+                    if (!String.IsNullOrEmpty(error)) throw new InvalidOperationException(error);
+                    if (titleBefore != GetWindowTitle(player)) throw new InvalidOperationException(T("播放文件正在切换，请重试。", "Media is changing. Retry the capture."));
+                    end = start;
+                }
+                else { RangeState range = GetValidRange(); source = range.SourcePath; start = range.InMilliseconds; end = range.OutMilliseconds; }
+                if (Jobs == null) throw new InvalidOperationException("Resident job coordinator is unavailable.");
+                LastSubmissionResult = "job:" + Jobs.Submit(new JobRequest(action, source, start, end, config));
             }
-
-            Task.Run(delegate
+            catch (Exception exception)
             {
-                try
-                {
-                    if (action == CaptureAction.CaptureFrame) CaptureCurrentFrame();
-                    if (action == CaptureAction.ExportOriginal) ExportOriginalRange();
-                    if (action == CaptureAction.ExportPrecise) ExportPreciseRange();
-                }
-                catch (Exception exception)
-                {
-                    WriteErrorLog(exception);
-                    ShowToast(T("导出失败", "Export failed"), Shorten(exception.Message, 100), 6500);
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref busy, 0);
-                }
-            });
+                LastSubmissionResult = "error:" + exception.Message;
+                WriteErrorLog(exception);
+                ShowToast(T("无法提交任务", "Unable to submit job"), Shorten(exception.Message, 160), 5000);
+            }
         }
 
         private void ShowSettings()
         {
+            if (desktop != null) { desktop.OpenSettings(); return; }
             if (Interlocked.CompareExchange(ref settingsOpen, 1, 0) != 0)
             {
                 ShowToast(MenuTitle, T("设置窗口已经打开。", "The settings window is already open."), 2500);
@@ -2150,6 +2250,8 @@ namespace PotPlayerFrameClip
                     {
                         if (settings.ShowDialog() == DialogResult.OK)
                         {
+                            if (Jobs != null) Jobs.Reconfigure();
+                            if (desktop != null) desktop.RefreshTheme();
                             string message = T(
                                 "新的输出位置和格式会从下一次截取或导出开始生效。",
                                 "The new output location and formats apply to the next capture or export.");
@@ -2204,6 +2306,7 @@ namespace PotPlayerFrameClip
             string readError = GetPlaybackReadError(player, source, current);
             if (!String.IsNullOrEmpty(readError))
             {
+                LastSubmissionResult = "error:" + readError;
                 ShowToast(MenuTitle, readError, 5000);
                 return;
             }
@@ -2228,11 +2331,8 @@ namespace PotPlayerFrameClip
         private void CaptureCurrentFrame()
         {
             EnsureTools();
-            IntPtr player = FindPotPlayerWindow();
-            string source = GetCurrentSource(player);
-            long current = GetCurrentMilliseconds(player);
-            string readError = GetPlaybackReadError(player, source, current);
-            if (!String.IsNullOrEmpty(readError)) throw new InvalidOperationException(readError);
+            string source = job.Request.Source;
+            long current = job.Request.Start;
 
             VideoInfo info = ProbeVideo(source);
             EnsureDolbyVisionDecodeIsReferenceSafe(info);
@@ -2262,7 +2362,7 @@ namespace PotPlayerFrameClip
             string imageArguments = "-hide_banner -loglevel error -y -ss " + seek + " -i " + Quote(source) +
                 " -map 0:v:0 -frames:v 1 -vf " + Quote(imageFilter) + " " + codecArguments +
                 " -color_range pc -color_primaries " + info.ColorPrimaries + " -color_trc " + info.ColorTransfer + " " + Quote(imagePath);
-            RunProcess(config.FfmpegPath, imageArguments, useTiff ? "TIFF frame" : "PNG frame");
+            RunDecodedMedia(imageArguments, useTiff ? "TIFF frame" : "PNG frame", info);
 
             string rec709Path = null;
             Exception rec709Failure = null;
@@ -2275,11 +2375,13 @@ namespace PotPlayerFrameClip
                     " -color_range pc -color_primaries bt709 -color_trc bt709 " + Quote(rec709Path);
                 try
                 {
-                    RunProcess(config.FfmpegPath, rec709Arguments, "Rec.709 tone-mapped frame");
+                    RunDecodedMedia(rec709Arguments, "Rec.709 tone-mapped frame", info);
                 }
+                catch (OperationCanceledException) { throw; }
                 catch (Exception exception)
                 {
                     rec709Failure = exception;
+                    lock (job.Gate) job.Warning = exception.Message;
                     WriteErrorLog(exception);
                 }
             }
@@ -2311,7 +2413,7 @@ namespace PotPlayerFrameClip
         private void ExportOriginalRange()
         {
             EnsureTools();
-            RangeState range = GetValidRange();
+            RangeState range = new RangeState { SourcePath = job.Request.Source, InMilliseconds = job.Request.Start, OutMilliseconds = job.Request.End };
             VideoInfo info = ProbeVideo(range.SourcePath);
             MediaOutputPaths paths = MediaOrganizer.GetPaths(config.LibraryRootDirectory, range.SourcePath, info.EmbeddedTitle, info.EmbeddedTitleIsSeries);
             string output = BuildAvailableOutputPath(paths.VideoDirectory,
@@ -2324,6 +2426,7 @@ namespace PotPlayerFrameClip
             string arguments = "-hide_banner -loglevel error -y -ss " + Seconds(range.InMilliseconds) +
                 " -i " + Quote(range.SourcePath) + " -t " + Seconds(duration) +
                 " -map 0:v:0 -map 0:a? -map 0:s? -map_metadata 0 -map_chapters 0 -c copy -avoid_negative_ts make_zero " + Quote(output);
+            job.SetProcessing("copy", String.Empty);
             RunProcess(config.FfmpegPath, arguments, "original range");
             ShowToast(T("原码片段已完成", "Source clip completed"), Path.GetFileName(output), 5500);
         }
@@ -2331,7 +2434,7 @@ namespace PotPlayerFrameClip
         private void ExportPreciseRange()
         {
             EnsureTools();
-            RangeState range = GetValidRange();
+            RangeState range = new RangeState { SourcePath = job.Request.Source, InMilliseconds = job.Request.Start, OutMilliseconds = job.Request.End };
             VideoInfo info = ProbeVideo(range.SourcePath);
             EnsureDolbyVisionDecodeIsReferenceSafe(info);
             MediaOutputPaths paths = MediaOrganizer.GetPaths(config.LibraryRootDirectory, range.SourcePath, info.EmbeddedTitle, info.EmbeddedTitleIsSeries);
@@ -2350,7 +2453,7 @@ namespace PotPlayerFrameClip
                 " -pix_fmt " + encoding.PixelFormat + " -color_range " + NormalizeRange(info.ColorRange) +
                 " -colorspace " + NormalizeOutputColorSpace(info) + " -color_primaries " + info.ColorPrimaries +
                 " -color_trc " + info.ColorTransfer + " -c:a pcm_s24le -ar 48000 -movflags +write_colr " + Quote(output);
-            RunProcess(config.FfmpegPath, arguments, "precise range");
+            RunDecodedMedia(arguments, "precise range", info);
             ShowToast(T("精确片段已完成", "Precise clip completed"), Path.GetFileName(output) + GetColorWarning(info), info.IsDolbyVision || info.MetadataAssumed ? 8000 : 5500);
         }
 
@@ -2372,7 +2475,7 @@ namespace PotPlayerFrameClip
 
         private VideoInfo ProbeVideo(string source)
         {
-            string arguments = "-v error -select_streams v:0 -show_entries stream=width,height,color_space,color_transfer,color_primaries,color_range,pix_fmt:stream_side_data=side_data_type,dv_profile,dv_bl_signal_compatibility_id -of default=noprint_wrappers=1 " + Quote(source);
+            string arguments = "-v error -select_streams v:0 -show_entries stream=codec_name,width,height,color_space,color_transfer,color_primaries,color_range,pix_fmt,film_grain:stream_side_data=side_data_type,dv_profile,dv_bl_signal_compatibility_id -of default=noprint_wrappers=1 " + Quote(source);
             string output = RunProcess(config.FfprobePath, arguments, "probe");
             VideoInfo info = new VideoInfo();
             foreach (string rawLine in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
@@ -2390,6 +2493,8 @@ namespace PotPlayerFrameClip
                 if (key == "color_primaries") info.ColorPrimaries = value;
                 if (key == "color_range") info.ColorRange = value;
                 if (key == "pix_fmt") info.PixelFormat = value;
+                if (key == "codec_name") info.Codec = value;
+                if (key == "film_grain" && (value == "0" || value == "1")) info.HasFilmGrain = value == "1";
                 if (key == "side_data_type" && value.IndexOf("DOVI", StringComparison.OrdinalIgnoreCase) >= 0) info.IsDolbyVision = true;
                 if (key == "dv_profile" && Int32.TryParse(value, out parsed))
                 {
@@ -2573,8 +2678,60 @@ namespace PotPlayerFrameClip
             return 12 * 60 * 60 * 1000;
         }
 
+        private void RunDecodedMedia(string arguments, string operation, VideoInfo info)
+        {
+            if (config.ProcessingDevice == "cpu" || !HardwareDecodePlan.Supports(info))
+            {
+                job.SetProcessing("cpu", config.ProcessingDevice == "cpu" ? T("已选择仅 CPU", "CPU-only selected") :
+                    T("此源格式使用参考 CPU 路径", "Reference CPU path for this source format"));
+                RunProcess(config.FfmpegPath, arguments, operation); return;
+            }
+            HardwareDecodePlan[] candidates;
+            string reason = T("硬件解码暂不可用，已自动改用 CPU", "Hardware decoding unavailable; using CPU");
+            try
+            {
+                candidates = resources.HardwarePlans(config.FfmpegPath, info, job.Cancellation.Token,
+                    delegate(string options) { return RunProcess(config.FfmpegPath, options, "hardware capabilities probe", 10000); });
+            }
+            catch (Exception error)
+            {
+                // Capability enumeration is optional, but cancellation is never a CPU retry.
+                if (!(error is IOException) && !(error is TimeoutException) && !(error is System.ComponentModel.Win32Exception)) throw;
+                job.Cancellation.Token.ThrowIfCancellationRequested();
+                candidates = new HardwareDecodePlan[0];
+                reason = T("GPU 能力探测失败，使用 CPU：", "GPU capability query failed; using CPU: ") + Shorten(error.Message, 180);
+            }
+            foreach (HardwareDecodePlan plan in candidates)
+            {
+                string key = HardwareFailureCache.Key(config.FfmpegPath, plan.Identity, info);
+                if (resources.HardwareFailures.Blocked(key)) continue;
+                job.Cancellation.Token.ThrowIfCancellationRequested();
+                IDisposable admission = null;
+                try
+                {
+                    if (!job.Request.IsImage) admission = resources.GpuVideos.Acquire(info, plan, job.Cancellation.Token,
+                        delegate { lock (job.Gate) job.Detail = T("等待 GPU 资源，优先保障播放", "Waiting for GPU playback headroom"); job.Notify(); });
+                    if (resources.HardwareFailures.Blocked(key)) continue;
+                    job.SetProcessing(plan.Backend + "-pending", plan.Adapter == null ? String.Empty : plan.Adapter.Name);
+                    RunProcess(config.FfmpegPath, plan.Apply(arguments), operation);
+                    job.SetProcessing(plan.Backend, plan.Adapter == null ? String.Empty : plan.Adapter.Name); return;
+                }
+                catch (FfmpegProcessException error)
+                {
+                    if (!error.HardwareInitializationFailure) throw;
+                    job.Cancellation.Token.ThrowIfCancellationRequested();
+                    resources.HardwareFailures.Failed(key);
+                }
+                finally { if (admission != null) admission.Dispose(); }
+            }
+            job.SetProcessing("cpu", reason);
+            RunProcess(config.FfmpegPath, arguments, operation);
+        }
+
         internal string RunProcess(string executable, string arguments, string operation, int timeoutMilliseconds = 0)
         {
+            if (job != null) return FfmpegRunner.Run(executable, arguments, operation,
+                timeoutMilliseconds > 0 ? timeoutMilliseconds : GetProcessTimeoutMilliseconds(operation), job, resources);
             ProcessStartInfo start = new ProcessStartInfo();
             start.FileName = executable;
             start.Arguments = arguments;
@@ -2624,14 +2781,15 @@ namespace PotPlayerFrameClip
             IntPtr foreground = NativeMethods.GetForegroundWindow();
             if (IsPotPlayerWindow(foreground)) return NativeMethods.GetAncestor(foreground, NativeMethods.GA_ROOT);
 
-            string[] processNames = new[] { "PotPlayerMini64", "PotPlayer64", "PotPlayerMini", "PotPlayer" };
-            foreach (string processName in processNames)
+            Process[] players = PlayerProcesses.Get(false);
+            try
             {
-                foreach (Process process in Process.GetProcessesByName(processName))
+                foreach (Process process in players)
                 {
                     if (process.MainWindowHandle != IntPtr.Zero) return process.MainWindowHandle;
                 }
             }
+            finally { foreach (Process process in players) process.Dispose(); }
             return IntPtr.Zero;
         }
 
@@ -2643,8 +2801,8 @@ namespace PotPlayerFrameClip
             if (processId == 0) return false;
             try
             {
-                string name = Process.GetProcessById((int)processId).ProcessName;
-                return name.IndexOf("PotPlayer", StringComparison.OrdinalIgnoreCase) >= 0;
+                using (Process process = Process.GetProcessById((int)processId))
+                    return process.ProcessName.IndexOf("PotPlayer", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             catch
             {
@@ -2693,7 +2851,7 @@ namespace PotPlayerFrameClip
             if (processId == 0) return null;
             try
             {
-                return Path.GetDirectoryName(Process.GetProcessById((int)processId).MainModule.FileName);
+                using (Process process = Process.GetProcessById((int)processId)) return Path.GetDirectoryName(process.MainModule.FileName);
             }
             catch
             {
@@ -2796,7 +2954,9 @@ namespace PotPlayerFrameClip
         private long GetCurrentMilliseconds(IntPtr player)
         {
             if (player == IntPtr.Zero) return -1;
-            return NativeMethods.SendMessage(player, NativeMethods.WM_USER, new IntPtr(0x5004), IntPtr.Zero).ToInt64();
+            UIntPtr result;
+            if (PlayerQuery.SendMessageTimeout(player, NativeMethods.WM_USER, new IntPtr(0x5004), IntPtr.Zero, 2, 300, out result) == IntPtr.Zero) return -1;
+            return unchecked((long)result.ToUInt64());
         }
 
         private string GetWindowTitle(IntPtr hwnd)
@@ -2825,6 +2985,7 @@ namespace PotPlayerFrameClip
 
         private string BuildAvailableOutputPath(string directory, string stem, string extension)
         {
+            if (job != null) return job.Reserve(directory, stem, extension);
             const int conservativePathLimit = 240;
             int maximumStemLength = conservativePathLimit - directory.Length - extension.Length - 1;
             if (maximumStemLength < 24)
@@ -2927,6 +3088,8 @@ namespace PotPlayerFrameClip
 
         private void ShowToast(string title, string message, int milliseconds)
         {
+            if (job != null) { lock (job.Gate) job.Detail = title; job.Notify(); return; }
+            if (desktop != null) { desktop.Message(title, message, milliseconds); return; }
             Action show = delegate
             {
                 ToastForm previousToast = activeToast;
@@ -2974,6 +3137,11 @@ namespace PotPlayerFrameClip
         internal int ProcessId;
         internal uint ThreadId;
         internal IntPtr Handle;
+        internal IntPtr BootstrapHandle;
+        internal IntPtr Window;
+        internal bool Ready;
+        internal int Attempts;
+        internal DateTime NextProbe;
     }
 
     internal sealed class NativeBridgeMessageWindow : NativeWindow, IDisposable
@@ -3021,9 +3189,14 @@ namespace PotPlayerFrameClip
         private readonly object syncRoot = new object();
         private readonly Dictionary<int, NativeBridgeHook> hooks = new Dictionary<int, NativeBridgeHook>();
         private readonly Action<string> trace;
-        private readonly System.Threading.Timer refreshTimer;
+        private readonly System.Windows.Forms.Timer refreshTimer;
         private IntPtr bridgeModule;
         private IntPtr bridgeProcedure;
+        private IntPtr bootstrapProcedure;
+        private readonly uint initializeMessage;
+        private readonly IntPtr ownerToken = new IntPtr(Process.GetCurrentProcess().Id);
+        internal const string InitializeMessageName = "PotPlayerFrameClip.NativeBridge.Initialize.v1";
+        internal const string OwnerPropertyName = "PotPlayerFrameClip.NativeBridge.Owner.v1";
         private Process x86Host;
         private int refreshRunning;
         private bool disposed;
@@ -3031,6 +3204,7 @@ namespace PotPlayerFrameClip
         internal NativeBridgeManager(Action<string> trace)
         {
             this.trace = trace;
+            initializeMessage = NativeMethods.RegisterWindowMessage(InitializeMessageName);
             string directory = AppDomain.CurrentDomain.BaseDirectory;
             StartX86Host(Path.Combine(directory, "FrameClipBridgeHost32.exe"));
             if (Environment.Is64BitOperatingSystem && Environment.Is64BitProcess)
@@ -3040,12 +3214,19 @@ namespace PotPlayerFrameClip
                 {
                     bridgeModule = NativeMethods.LoadLibrary(bridgePath);
                     if (bridgeModule != IntPtr.Zero)
+                    {
                         bridgeProcedure = NativeMethods.GetProcAddress(bridgeModule, "FrameClipMouseProc");
+                        bootstrapProcedure = NativeMethods.GetProcAddress(bridgeModule, "FrameClipGetMessageProc");
+                    }
                 }
                 if (bridgeModule == IntPtr.Zero || bridgeProcedure == IntPtr.Zero)
                     Trace("native-bridge64-load-failed " + Marshal.GetLastWin32Error());
             }
-            refreshTimer = new System.Threading.Timer(Refresh, null, 0, 1000);
+            // Hook ownership stays on the resident UI thread with a real message pump.
+            refreshTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            refreshTimer.Tick += delegate { Refresh(null); };
+            refreshTimer.Start();
+            Refresh(null);
         }
 
         private void StartX86Host(string path)
@@ -3075,7 +3256,7 @@ namespace PotPlayerFrameClip
             try
             {
                 HashSet<int> active = new HashSet<int>();
-                foreach (Process process in Process.GetProcesses())
+                foreach (Process process in PlayerProcesses.Get(true))
                 {
                     try
                     {
@@ -3089,7 +3270,7 @@ namespace PotPlayerFrameClip
                         uint threadId = NativeMethods.GetWindowThreadProcessId(window, out processId);
                         if (threadId == 0) continue;
                         active.Add(process.Id);
-                        EnsureHook(process.Id, threadId);
+                        EnsureHook(process.Id, threadId, window);
                     }
                     catch { }
                     finally { process.Dispose(); }
@@ -3102,24 +3283,60 @@ namespace PotPlayerFrameClip
             }
         }
 
-        private void EnsureHook(int processId, uint threadId)
+        private void EnsureHook(int processId, uint threadId, IntPtr window)
         {
             lock (syncRoot)
             {
                 NativeBridgeHook existing;
-                if (hooks.TryGetValue(processId, out existing) && existing.ThreadId == threadId && existing.Handle != IntPtr.Zero)
-                    return;
-                if (existing != null && existing.Handle != IntPtr.Zero)
-                    NativeMethods.UnhookWindowsHookEx(existing.Handle);
+                if (hooks.TryGetValue(processId, out existing) && existing.ThreadId == threadId && existing.Window == window && existing.Handle != IntPtr.Zero)
+                {
+                    if (NativeMethods.GetProp(window, OwnerPropertyName) == ownerToken)
+                    {
+                        if (!existing.Ready) Trace("native-bridge64-ready pid=" + processId);
+                        existing.Ready = true;
+                        if (existing.BootstrapHandle != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(existing.BootstrapHandle);
+                        existing.BootstrapHandle = IntPtr.Zero;
+                        return;
+                    }
+                    existing.Ready = false;
+                    if (DateTime.UtcNow < existing.NextProbe) return;
+                    if (existing.Attempts < 3)
+                    {
+                        Probe(existing);
+                        return;
+                    }
+                    Trace("native-bridge64-not-ready pid=" + processId + " retry");
+                }
+                if (existing != null) ReleaseHook(existing);
                 IntPtr hook = NativeMethods.SetWindowsHookExNative(NativeMethods.WH_MOUSE, bridgeProcedure, bridgeModule, threadId);
                 if (hook == IntPtr.Zero)
                 {
                     Trace("native-bridge64-hook-failed pid=" + processId + " error=" + Marshal.GetLastWin32Error());
                     return;
                 }
-                hooks[processId] = new NativeBridgeHook { ProcessId = processId, ThreadId = threadId, Handle = hook };
-                Trace("native-bridge64-hooked pid=" + processId + " thread=" + threadId);
+                NativeBridgeHook entry = new NativeBridgeHook { ProcessId = processId, ThreadId = threadId, Window = window, Handle = hook };
+                hooks[processId] = entry;
+                Trace("native-bridge64-installed pid=" + processId + " thread=" + threadId);
+                Probe(entry);
             }
+        }
+
+        private void Probe(NativeBridgeHook entry)
+        {
+            entry.Attempts++;
+            entry.NextProbe = DateTime.UtcNow.AddSeconds(entry.Attempts < 3 ? 2 : 30);
+            if (bootstrapProcedure == IntPtr.Zero || initializeMessage == 0) return;
+            if (entry.BootstrapHandle == IntPtr.Zero)
+                entry.BootstrapHandle = NativeMethods.SetWindowsHookExNative(NativeMethods.WH_GETMESSAGE, bootstrapProcedure, bridgeModule, entry.ThreadId);
+            if (entry.BootstrapHandle == IntPtr.Zero || !NativeMethods.PostMessage(entry.Window, (int)initializeMessage, ownerToken, IntPtr.Zero))
+                Trace("native-bridge64-probe-failed pid=" + entry.ProcessId + " error=" + Marshal.GetLastWin32Error());
+        }
+
+        private static void ReleaseHook(NativeBridgeHook entry)
+        {
+            if (entry.Handle != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(entry.Handle);
+            if (entry.BootstrapHandle != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(entry.BootstrapHandle);
+            entry.Handle = entry.BootstrapHandle = IntPtr.Zero;
         }
 
         private void RemoveInactiveHooks(HashSet<int> active)
@@ -3129,7 +3346,7 @@ namespace PotPlayerFrameClip
                 foreach (int processId in hooks.Keys.Where(delegate(int value) { return !active.Contains(value); }).ToArray())
                 {
                     NativeBridgeHook entry = hooks[processId];
-                    if (entry.Handle != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(entry.Handle);
+                    ReleaseHook(entry);
                     hooks.Remove(processId);
                     Trace("native-bridge64-unhooked pid=" + processId);
                 }
@@ -3149,12 +3366,13 @@ namespace PotPlayerFrameClip
             lock (syncRoot)
             {
                 foreach (NativeBridgeHook entry in hooks.Values)
-                    if (entry.Handle != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(entry.Handle);
+                    ReleaseHook(entry);
                 hooks.Clear();
             }
             if (bridgeModule != IntPtr.Zero) NativeMethods.FreeLibrary(bridgeModule);
             bridgeModule = IntPtr.Zero;
             bridgeProcedure = IntPtr.Zero;
+            bootstrapProcedure = IntPtr.Zero;
         }
     }
 
@@ -3179,6 +3397,7 @@ namespace PotPlayerFrameClip
         private readonly Control dispatcher;
         private readonly AppConfig config;
         private readonly CaptureEngine engine;
+        private readonly ResidentIpc ipc;
         private readonly NativeBridgeMessageWindow bridgeMessageWindow;
         private readonly NativeBridgeManager nativeBridge;
         private readonly System.Windows.Forms.Timer installRepairTimer;
@@ -3202,6 +3421,7 @@ namespace PotPlayerFrameClip
             dispatcher = new Control();
             dispatcher.CreateControl();
             engine = new CaptureEngine(config, dispatcher);
+            engine.ExitRequested += ExitThread;
             bridgeMessageWindow = new NativeBridgeMessageWindow(engine, dispatcher);
             nativeBridge = new NativeBridgeManager(TraceMenu);
             installRepairTimer = new System.Windows.Forms.Timer();
@@ -3222,6 +3442,7 @@ namespace PotPlayerFrameClip
             if (mouseHook == IntPtr.Zero || popupEventHook == IntPtr.Zero)
                 throw new InvalidOperationException(UiText.Choose(config.Language,
                     "无法建立 PotPlayer 菜单扩展钩子。", "Unable to initialize the PotPlayer menu extension hook."));
+            ipc = new ResidentIpc(delegate(string command) { return ResidentIpc.Handle(command, engine, dispatcher); });
         }
 
         internal CaptureEngine Engine
@@ -3525,7 +3746,7 @@ namespace PotPlayerFrameClip
             if (processId == 0) return IsPotPlayerWindow(NativeMethods.GetForegroundWindow());
             try
             {
-                return Process.GetProcessById((int)processId).ProcessName.IndexOf("PotPlayer", StringComparison.OrdinalIgnoreCase) >= 0;
+                using (Process process = Process.GetProcessById((int)processId)) return process.ProcessName.IndexOf("PotPlayer", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             catch
             {
@@ -3542,7 +3763,7 @@ namespace PotPlayerFrameClip
             if (processId == 0) return false;
             try
             {
-                return Process.GetProcessById((int)processId).ProcessName.IndexOf("PotPlayer", StringComparison.OrdinalIgnoreCase) >= 0;
+                using (Process process = Process.GetProcessById((int)processId)) return process.ProcessName.IndexOf("PotPlayer", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             catch
             {
@@ -3559,6 +3780,8 @@ namespace PotPlayerFrameClip
             if (foregroundEventHook != IntPtr.Zero) NativeMethods.UnhookWinEvent(foregroundEventHook);
             if (disposing)
             {
+                ipc.Dispose();
+                engine.Dispose();
                 nativeBridge.Dispose();
                 bridgeMessageWindow.Dispose();
                 installRepairTimer.Stop();
@@ -3574,6 +3797,17 @@ namespace PotPlayerFrameClip
         [STAThread]
         private static int Main(string[] args)
         {
+            AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e)
+            {
+                RuntimeDiagnostics.Write(e.ExceptionObject as Exception ?? new Exception(Convert.ToString(e.ExceptionObject)), "unhandled");
+            };
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
+            {
+                string path = RuntimeDiagnostics.Write(e.Exception, "ui-thread");
+                try { MessageBox.Show(e.Exception.Message + (path == null ? "" : Environment.NewLine + path), AppPaths.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                finally { Application.ExitThread(); }
+            };
             NativeMethods.SetProcessDPIAware();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -3587,16 +3821,17 @@ namespace PotPlayerFrameClip
             }
 
             bool created;
-            using (Mutex mutex = new Mutex(true, "Local\\PotPlayerFrameClip-8D04C93A", out created))
+            using (Mutex mutex = new Mutex(true, ResidentIpc.MutexName, out created))
             {
                 if (!created) return 0;
                 try
                 {
-                    Application.Run(new MenuBridgeContext(config));
+                    using (MenuBridgeContext context = new MenuBridgeContext(config)) Application.Run(context);
                     return 0;
                 }
                 catch (Exception exception)
                 {
+                    RuntimeDiagnostics.Write(exception, "resident");
                     MessageBox.Show(exception.Message, AppPaths.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return 1;
                 }
@@ -3611,35 +3846,16 @@ namespace PotPlayerFrameClip
                 try { return MenuLocalization.ApplyToFile(args[2], args[1]) ? 0 : 1; }
                 catch { return 1; }
             }
-            using (Form dispatcherForm = new Form())
+            if (requestedAction == "--seek" && args.Length > 1)
             {
-                dispatcherForm.CreateControl();
-                CaptureEngine engine = new CaptureEngine(config, dispatcherForm);
-                string action = requestedAction;
-                if (action == "--seek" && args.Length > 1)
+                using (CaptureEngine engine = new CaptureEngine(config, null))
                 {
                     long milliseconds;
                     return long.TryParse(args[1], out milliseconds) && engine.Seek(milliseconds) ? 0 : 2;
                 }
-                if (action == "--capture") engine.Execute(CaptureAction.CaptureFrame);
-                else if (action == "--mark-in") engine.Execute(CaptureAction.MarkIn);
-                else if (action == "--mark-out") engine.Execute(CaptureAction.MarkOut);
-                else if (action == "--original") engine.Execute(CaptureAction.ExportOriginal);
-                else if (action == "--precise") engine.Execute(CaptureAction.ExportPrecise);
-                else if (action == "--clear") engine.Execute(CaptureAction.ClearRange);
-                else if (action == "--settings") engine.Execute(CaptureAction.Settings);
-                else if (action == "--open-images") engine.Execute(CaptureAction.OpenImageOutput);
-                else if (action == "--open-videos") engine.Execute(CaptureAction.OpenVideoOutput);
-                else return 2;
-
-                do
-                {
-                    Application.DoEvents();
-                    Thread.Sleep(100);
-                }
-                while (engine.IsBusy || engine.HasActiveToast);
-                return 0;
             }
+            if (!new[] { "--capture", "--mark-in", "--mark-out", "--original", "--precise", "--clear", "--settings", "--open-images", "--open-videos", "--tasks", "--quit", "--maintenance-stop" }.Contains(requestedAction)) return 2;
+            return ResidentIpc.Forward(requestedAction);
         }
     }
 }
