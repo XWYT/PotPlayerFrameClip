@@ -47,8 +47,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = '${{ github.ref_name }}'
-          gh release view $tag --json tagName 2>$null
-          if ($LASTEXITCODE -eq 0) { exit 0 }
+          # Missing releases are normal. Avoid stderr-based probing under
+          # Windows PowerShell's terminating native-command error handling.
+          $existingTags = @(gh release list --limit 100 --json tagName --jq '.[].tagName')
+          if ($LASTEXITCODE -ne 0) { throw 'Release listing failed.' }
+          if ($existingTags -contains $tag) { exit 0 }
           # Full installers are deliberately excluded until their source/license gate passes.
-          gh release create $tag dist/PotPlayerFrameClip-*-Setup.exe dist/PotPlayerFrameClip-*-Setup.exe.sha256 --generate-notes --verify-tag --draft
+          $assets = @(Get-ChildItem -LiteralPath dist -File | Where-Object {
+            $_.Name -eq "PotPlayerFrameClip-$tag-Setup.exe" -or $_.Name -eq "PotPlayerFrameClip-$tag-Setup.exe.sha256"
+          } | ForEach-Object FullName)
+          if ($assets.Count -ne 2) { throw 'Expected one lightweight installer and checksum.' }
+          gh release create $tag @assets --generate-notes --verify-tag --draft
           if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed.' }
