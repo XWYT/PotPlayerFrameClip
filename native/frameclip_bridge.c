@@ -262,26 +262,45 @@ static void EnsureSubclass(HWND window)
     if (window) SetWindowSubclass(window, FrameClipSubclassProc, FRAMECLIP_SUBCLASS_ID, 0);
 }
 
-/* A queued, registered message proves that this DLL ran on the player UI thread.
- * The hook owner must keep a message loop alive; a nonzero hook handle is not proof.
+static BOOL InitializeBridge(HWND window, WPARAM owner, LPARAM reserved)
+{
+    DWORD process_id;
+    if (!window || !owner || reserved ||
+        GetWindowThreadProcessId(window, &process_id) != GetCurrentThreadId() ||
+        process_id != GetCurrentProcessId()) return FALSE;
+    PinBridgeModule();
+    g_main_window = window;
+    if (!SetWindowSubclass(window, FrameClipSubclassProc, FRAMECLIP_SUBCLASS_ID, 0) ||
+        !SetPropW(window, FRAMECLIP_OWNER_PROPERTY, (HANDLE)owner)) return FALSE;
+    WriteBridgeLog(L"bridge-ready", (int)owner);
+    return TRUE;
+}
+
+/* A sent message also reaches filtered/modal message loops that do not retrieve
+ * the queued initialization message. The owner bounds this synchronous probe and
+ * removes the temporary hook after target-owned acknowledgement.
  */
+__declspec(dllexport) LRESULT CALLBACK FrameClipCallWndProc(int code, WPARAM w_param, LPARAM l_param)
+{
+    if (code == HC_ACTION && l_param) {
+        CWPSTRUCT *message = (CWPSTRUCT *)l_param;
+        if (!g_initialize_message) g_initialize_message = RegisterWindowMessageW(FRAMECLIP_INITIALIZE_MESSAGE);
+        if (g_initialize_message && message->message == g_initialize_message)
+            InitializeBridge(message->hwnd, message->wParam, message->lParam);
+    }
+    return CallNextHookEx(NULL, code, w_param, l_param);
+}
+
+/* Retained for compatible older owners; new owners use the sent-message hook. */
 __declspec(dllexport) LRESULT CALLBACK FrameClipGetMessageProc(int code, WPARAM w_param, LPARAM l_param)
 {
     MSG *message;
-    DWORD process_id;
     if (code != HC_ACTION || w_param != PM_REMOVE || !l_param)
         return CallNextHookEx(NULL, code, w_param, l_param);
     if (!g_initialize_message) g_initialize_message = RegisterWindowMessageW(FRAMECLIP_INITIALIZE_MESSAGE);
     message = (MSG *)l_param;
     if (g_initialize_message && message->message == g_initialize_message && message->hwnd &&
-        message->wParam && message->lParam == 0 &&
-        GetWindowThreadProcessId(message->hwnd, &process_id) == GetCurrentThreadId() &&
-        process_id == GetCurrentProcessId()) {
-        PinBridgeModule();
-        g_main_window = message->hwnd;
-        if (SetWindowSubclass(g_main_window, FrameClipSubclassProc, FRAMECLIP_SUBCLASS_ID, 0) &&
-            SetPropW(g_main_window, FRAMECLIP_OWNER_PROPERTY, (HANDLE)message->wParam))
-            WriteBridgeLog(L"bridge-ready", (int)message->wParam);
+        InitializeBridge(message->hwnd, message->wParam, message->lParam)) {
         message->message = WM_NULL;
         message->wParam = 0;
         message->lParam = 0;

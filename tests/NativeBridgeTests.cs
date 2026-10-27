@@ -21,6 +21,9 @@ namespace PotPlayerFrameClip
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetProp(IntPtr window, string name);
         [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+        [StructLayout(LayoutKind.Sequential)] private struct QueuedMessage { internal IntPtr Window; internal uint Message; internal UIntPtr WParam; internal IntPtr LParam; internal uint Time; internal int X, Y; internal uint Private; }
+        [DllImport("user32.dll")] private static extern bool PeekMessage(out QueuedMessage message, IntPtr window, uint first, uint last, uint remove);
         [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr window, int command);
         [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
         [DllImport("user32.dll")] private static extern bool SetProp(IntPtr window, string name, IntPtr value);
@@ -32,6 +35,7 @@ namespace PotPlayerFrameClip
             internal int AboutCount;
             internal int ActionCount;
             internal int LastAction = -1;
+            internal bool Closed;
             internal TargetWindow(string caption = "FrameClip isolated bridge target", int width = 600, int height = 400)
             {
                 CreateHandle(new CreateParams { Caption = caption, X = -30000, Y = -30000, Width = width, Height = height, Style = unchecked((int)0x80000000) });
@@ -40,7 +44,7 @@ namespace PotPlayerFrameClip
             {
                 if (message.Msg == 0x111 && message.WParam.ToInt64() == 0xE140) AboutCount++;
                 if (message.Msg == 0x84C0) { ActionCount++; LastAction = message.WParam.ToInt32(); }
-                if (message.Msg == 0x10) { Application.ExitThread(); return; }
+                if (message.Msg == 0x10) { Closed = true; Application.ExitThread(); return; }
                 base.WndProc(ref message);
             }
             public void Dispose() { DestroyHandle(); }
@@ -130,23 +134,37 @@ namespace PotPlayerFrameClip
         [STAThread] public static int Main(string[] args)
         {
             TestDesktop.Initialize();
-            if (args.Length == 2 && args[0] == "--bridge-target")
+            if (args.Length == 2 && (args[0] == "--bridge-target" || args[0] == "--bridge-target-filtered"))
             {
                 using (TargetWindow window = new TargetWindow())
                 using (System.Windows.Forms.Timer deadline = new System.Windows.Forms.Timer { Interval = 25000 })
                 {
                     File.WriteAllText(args[1], window.Handle.ToInt64().ToString(CultureInfo.InvariantCulture));
                     deadline.Tick += delegate { Application.ExitThread(); };
-                    deadline.Start(); Application.Run();
+                    if (args[0] == "--bridge-target-filtered")
+                    {
+                        // Model a player loop that services sent messages but never
+                        // retrieves our registered queued initialization message.
+                        Stopwatch limit = Stopwatch.StartNew();
+                        while (!window.Closed && limit.ElapsedMilliseconds < 25000)
+                        { QueuedMessage message; PeekMessage(out message, IntPtr.Zero, 0x113, 0x113, 1); Thread.Sleep(5); }
+                    }
+                    else { deadline.Start(); Application.Run(); }
                 }
                 return 0;
             }
             if (args.Length != 2) return 2;
+            int normal = VerifyInjection(args, false);
+            return normal == 0 ? VerifyInjection(args, true) : normal;
+        }
+
+        private static int VerifyInjection(string[] args, bool filtered)
+        {
             string signal = Path.Combine(args[1], Guid.NewGuid().ToString("N") + ".hwnd");
             Process child = null; IntPtr module = IntPtr.Zero, mouse = IntPtr.Zero, bootstrap = IntPtr.Zero;
             try
             {
-                child = Process.Start(new ProcessStartInfo(Application.ExecutablePath, "--bridge-target \"" + signal + "\"") { UseShellExecute = false, CreateNoWindow = true });
+                child = Process.Start(new ProcessStartInfo(Application.ExecutablePath, (filtered ? "--bridge-target-filtered" : "--bridge-target") + " \"" + signal + "\"") { UseShellExecute = false, CreateNoWindow = true });
                 Stopwatch timer = Stopwatch.StartNew();
                 while (!File.Exists(signal) && timer.ElapsedMilliseconds < 10000) { Application.DoEvents(); Thread.Sleep(10); }
                 if (!File.Exists(signal)) throw new InvalidOperationException("Target did not start");
@@ -155,33 +173,50 @@ namespace PotPlayerFrameClip
                 if (pid != child.Id) throw new InvalidOperationException("Target identity mismatch");
                 module = LoadLibrary(args[0]);
                 if (module == IntPtr.Zero) throw new InvalidOperationException("DLL load failed");
-                mouse = SetWindowsHookEx(7, GetProcAddress(module, "FrameClipMouseProc"), module, thread);
-                bootstrap = SetWindowsHookEx(3, GetProcAddress(module, "FrameClipGetMessageProc"), module, thread);
-                if (mouse == IntPtr.Zero || bootstrap == IntPtr.Zero) throw new InvalidOperationException("Hook setup failed: " + Marshal.GetLastWin32Error());
                 uint initialize = RegisterWindowMessage("PotPlayerFrameClip.NativeBridge.Initialize.v1");
                 IntPtr owner = new IntPtr(Process.GetCurrentProcess().Id);
-                PostMessage(window, initialize, owner, IntPtr.Zero);
+                if (filtered)
+                {
+                    IntPtr queued = SetWindowsHookEx(3, GetProcAddress(module, "FrameClipGetMessageProc"), module, thread);
+                    if (queued == IntPtr.Zero) throw new InvalidOperationException("Queued baseline hook failed");
+                    try
+                    {
+                        PostMessage(window, initialize, owner, IntPtr.Zero);
+                        Stopwatch queuedWait = Stopwatch.StartNew();
+                        while (queuedWait.ElapsedMilliseconds < 300) { Application.DoEvents(); Thread.Sleep(10); }
+                        if (GetProp(window, "PotPlayerFrameClip.NativeBridge.Owner.v1") != IntPtr.Zero)
+                            throw new InvalidOperationException("Filtered target unexpectedly retrieved queued initialization");
+                        Console.WriteLine("Filtered loop reproduces queued initialization failure");
+                    }
+                    finally { UnhookWindowsHookEx(queued); }
+                }
+                mouse = SetWindowsHookEx(7, GetProcAddress(module, "FrameClipMouseProc"), module, thread);
+                bootstrap = SetWindowsHookEx(4, GetProcAddress(module, "FrameClipCallWndProc"), module, thread);
+                if (mouse == IntPtr.Zero || bootstrap == IntPtr.Zero) throw new InvalidOperationException("Hook setup failed: " + Marshal.GetLastWin32Error());
+                IntPtr result;
+                if (SendMessageTimeout(window, initialize, owner, IntPtr.Zero, 3, 150, out result) == IntPtr.Zero)
+                    throw new InvalidOperationException("Sent initialization failed: " + Marshal.GetLastWin32Error());
                 timer.Restart();
                 while (GetProp(window, "PotPlayerFrameClip.NativeBridge.Owner.v1") != owner && timer.ElapsedMilliseconds < 6000)
                 { Application.DoEvents(); Thread.Sleep(10); }
                 if (GetProp(window, "PotPlayerFrameClip.NativeBridge.Owner.v1") != owner)
                     throw new InvalidOperationException("Hook returned a handle but target handshake failed");
                 IntPtr rebound = new IntPtr(owner.ToInt64() + 1);
-                PostMessage(window, initialize, rebound, IntPtr.Zero);
+                SendMessageTimeout(window, initialize, rebound, IntPtr.Zero, 3, 150, out result);
                 timer.Restart();
                 while (GetProp(window, "PotPlayerFrameClip.NativeBridge.Owner.v1") != rebound && timer.ElapsedMilliseconds < 3000)
                 { Application.DoEvents(); Thread.Sleep(10); }
                 if (GetProp(window, "PotPlayerFrameClip.NativeBridge.Owner.v1") != rebound)
                     throw new InvalidOperationException("Existing subclass did not rebind to restarted owner");
-                PostMessage(window, initialize, owner, IntPtr.Zero);
+                SendMessageTimeout(window, initialize, owner, IntPtr.Zero, 3, 150, out result);
                 timer.Restart();
                 while (GetProp(window, "PotPlayerFrameClip.NativeBridge.Owner.v1") != owner && timer.ElapsedMilliseconds < 3000)
                 { Application.DoEvents(); Thread.Sleep(10); }
                 if (GetProp(window, "PotPlayerFrameClip.NativeBridge.Owner.v1") != owner)
                     throw new InvalidOperationException("Owner rebind restore failed");
                 UnhookWindowsHookEx(bootstrap); bootstrap = IntPtr.Zero;
-                Console.WriteLine((Environment.Is64BitProcess ? "x64" : "x86") + " injected handshake passed");
-                PostMessage(window, 0x10, IntPtr.Zero, IntPtr.Zero);
+                Console.WriteLine((Environment.Is64BitProcess ? "x64" : "x86") + (filtered ? " filtered-loop" : " normal-loop") + " injected handshake passed");
+                SendMessageTimeout(window, 0x10, IntPtr.Zero, IntPtr.Zero, 3, 1000, out result);
                 if (!child.WaitForExit(5000) || child.ExitCode != 0) throw new InvalidOperationException("Target shutdown failed");
                 VerifyMenuActions(module);
                 return 0;

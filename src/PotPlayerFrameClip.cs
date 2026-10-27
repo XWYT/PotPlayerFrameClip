@@ -307,6 +307,7 @@ namespace PotPlayerFrameClip
         internal const int WH_MOUSE_LL = 14;
         internal const int WH_MOUSE = 7;
         internal const int WH_GETMESSAGE = 3;
+        internal const int WH_CALLWNDPROC = 4;
         internal const int WM_MOUSEMOVE = 0x0200;
         internal const int WM_RBUTTONDOWN = 0x0204;
         internal const int WM_RBUTTONUP = 0x0205;
@@ -3216,7 +3217,7 @@ namespace PotPlayerFrameClip
                     if (bridgeModule != IntPtr.Zero)
                     {
                         bridgeProcedure = NativeMethods.GetProcAddress(bridgeModule, "FrameClipMouseProc");
-                        bootstrapProcedure = NativeMethods.GetProcAddress(bridgeModule, "FrameClipGetMessageProc");
+                        bootstrapProcedure = NativeMethods.GetProcAddress(bridgeModule, "FrameClipCallWndProc");
                     }
                 }
                 if (bridgeModule == IntPtr.Zero || bridgeProcedure == IntPtr.Zero)
@@ -3327,8 +3328,9 @@ namespace PotPlayerFrameClip
             entry.NextProbe = DateTime.UtcNow.AddSeconds(entry.Attempts < 3 ? 2 : 30);
             if (bootstrapProcedure == IntPtr.Zero || initializeMessage == 0) return;
             if (entry.BootstrapHandle == IntPtr.Zero)
-                entry.BootstrapHandle = NativeMethods.SetWindowsHookExNative(NativeMethods.WH_GETMESSAGE, bootstrapProcedure, bridgeModule, entry.ThreadId);
-            if (entry.BootstrapHandle == IntPtr.Zero || !NativeMethods.PostMessage(entry.Window, (int)initializeMessage, ownerToken, IntPtr.Zero))
+                entry.BootstrapHandle = NativeMethods.SetWindowsHookExNative(NativeMethods.WH_CALLWNDPROC, bootstrapProcedure, bridgeModule, entry.ThreadId);
+            UIntPtr result;
+            if (entry.BootstrapHandle == IntPtr.Zero || PlayerQuery.SendMessageTimeout(entry.Window, initializeMessage, ownerToken, IntPtr.Zero, 3, 150, out result) == IntPtr.Zero)
                 Trace("native-bridge64-probe-failed pid=" + entry.ProcessId + " error=" + Marshal.GetLastWin32Error());
         }
 

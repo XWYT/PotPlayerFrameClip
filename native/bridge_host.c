@@ -33,6 +33,7 @@ static const wchar_t *OWNER_PROPERTY = L"PotPlayerFrameClip.NativeBridge.Owner.v
 static void ProbeHook(HookEntry *entry)
 {
     DWORD now = GetTickCount();
+    DWORD_PTR result;
     if ((DWORD_PTR)GetPropW(entry->window, OWNER_PROPERTY) == g_owner_id) {
         entry->ready = TRUE;
         if (entry->bootstrap) UnhookWindowsHookEx(entry->bootstrap);
@@ -50,9 +51,10 @@ static void ProbeHook(HookEntry *entry)
     }
     entry->attempts++;
     entry->next_probe = now + (entry->attempts < 3 ? 2000 : 30000);
-    if (!entry->bootstrap) entry->bootstrap = SetWindowsHookExW(WH_GETMESSAGE, g_bootstrap_proc, g_bridge, entry->thread_id);
+    if (!entry->bootstrap) entry->bootstrap = SetWindowsHookExW(WH_CALLWNDPROC, g_bootstrap_proc, g_bridge, entry->thread_id);
     if (entry->bootstrap && g_initialize_message)
-        PostMessageW(entry->window, g_initialize_message, (WPARAM)g_owner_id, 0);
+        SendMessageTimeoutW(entry->window, g_initialize_message, (WPARAM)g_owner_id, 0,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK, 150, &result);
 }
 
 static BOOL IsPotPlayerProcess(DWORD process_id)
@@ -193,7 +195,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR command_line,
     g_bridge = LoadLibraryW(module_path);
     if (!g_bridge) return 3;
     g_hook_proc = (HOOKPROC)GetProcAddress(g_bridge, "FrameClipMouseProc");
-    g_bootstrap_proc = (HOOKPROC)GetProcAddress(g_bridge, "FrameClipGetMessageProc");
+    g_bootstrap_proc = (HOOKPROC)GetProcAddress(g_bridge, "FrameClipCallWndProc");
     g_initialize_message = RegisterWindowMessageW(L"PotPlayerFrameClip.NativeBridge.Initialize.v1");
     if (!g_hook_proc || !g_bootstrap_proc || !g_initialize_message) return 4;
 

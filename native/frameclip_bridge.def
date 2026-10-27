@@ -2,3 +2,4 @@ LIBRARY FrameClipBridge
 EXPORTS
     FrameClipMouseProc
     FrameClipGetMessageProc
+    FrameClipCallWndProc
