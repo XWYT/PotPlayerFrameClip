@@ -12,7 +12,7 @@
 
 支持无损静帧、多格式片段导出和多种 HDR/SDR 色彩空间。片段既可保留原码，也可精确转码，供后期编辑使用。
 
-**当前版本：0.4.0 预览版。** [下载与版本说明](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.0) · [English](README.en.md)
+**当前版本：0.4.1 正式版。** [下载与版本说明](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.1) · [English](README.en.md)
 
 安装后，PotPlayer 右键菜单中会出现 **参照帧与片段截取**。
 
@@ -27,7 +27,7 @@
 
 输出位置、图片格式、转码预设、性能策略和提醒位置均可在设置中调整。任务使用提交时确定的源文件、截取范围和设置，不受之后的播放操作或设置调整影响。
 
-0.4.0 更新了原生界面，加入任务进度、并行导出和 GPU 优先处理，并修复菜单桥接问题，详见[版本说明](docs/releases/v0.4.0.md)。这是预览版，Intel/AMD 实机、不同皮肤、混合 DPI 和长时间使用的验证尚未完成。公开的轻量安装包不含 FFmpeg。
+0.4.1 正式发布新版界面、任务进度、并行导出和 GPU 优先处理，并修复外观刷新时的托盘菜单生命周期问题，详见[版本说明](docs/releases/v0.4.1.md)。Intel/AMD 实机、不同皮肤、物理混合 DPI 和长时间使用仍需扩大验证覆盖。公开的轻量安装包不含 FFmpeg。
 
 ## GPU 处理
 
@@ -70,7 +70,7 @@ FrameClip 不捆绑 PotPlayer 或 .NET Framework。公开轻量包不含 FFmpeg�
 - 内置媒体工具是 Win64 构建；32 位 PotPlayer 可在 64 位 Windows 使用。32 位 Windows 应选兼容的外部 FFmpeg。
 - Full 包目前为本地开发候选；公开发布前还需完成对应源码与第三方许可材料归档，不表示 GitHub 已提供此包。
 
-构建离线候选：先运行 scripts/prepare-ffmpeg.ps1 -Download，再运行 scripts/build.ps1 -Version 0.4.0 -BundleFFmpeg。下载仅发生于构建时，版本与 SHA256 固定在 installer/ffmpeg-manifest.json。
+构建离线候选：先运行 scripts/prepare-ffmpeg.ps1 -Download，再运行 scripts/build.ps1 -Version 0.4.1 -BundleFFmpeg。下载仅发生于构建时，版本与 SHA256 固定在 installer/ffmpeg-manifest.json。
 
 静默安装参数：/FFMPEGMODE=existing|bundled|later；已有版本配合 /FFMPEGPATH="完整路径"。轻量包请求 bundled 会在替换前失败。完整包未检测到已有 FFmpeg 时默认内置版本。
 
@@ -111,7 +111,7 @@ winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source 
 项目地址：https://github.com/XWYT/PotPlayerFrameClip
 
 要求：
-1. 从上述项目 GitHub Releases 下载本 README 所述的 0.4.0 预览版安装程序 PotPlayerFrameClip-v0.4.0-Setup.exe。明确告诉我这是预览版；不要下载源码压缩包，也不要从第三方网站获取文件。
+1. 从上述项目 GitHub Releases 下载本 README 所述的 0.4.1 正式版安装程序 PotPlayerFrameClip-v0.4.1-Setup.exe。不要下载源码压缩包，也不要从第三方网站获取文件。
 2. 确认下载链接属于上述 GitHub 仓库；如果发布页提供 SHA-256，请在安装前核对。安装包目前没有商业代码签名，不要关闭 Windows 安全功能，也不要在来源无法确认时绕过安全警告。
 3. 检查 PotPlayer、ffmpeg.exe、ffprobe.exe 和 .NET Framework 4.6.2 或更高版本。缺少 FFmpeg 时，优先使用 WinGet 安装 Gyan.FFmpeg；不要重新安装或修改已经正常工作的依赖。
 4. 自动识别 PotPlayer 安装目录和 FFmpeg 路径。标准安装、32 位、64 位或便携版无法自动识别时，再根据本机实际路径向安装程序传入 /POTPLAYERDIR 和 /FFMPEGPATH。
@@ -156,7 +156,7 @@ $setup=Get-ChildItem -LiteralPath . -Filter 'PotPlayerFrameClip-v*-Setup.exe' | 
 便携版 PotPlayer 与自定义 FFmpeg：
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.1-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 可选参数：
@@ -284,7 +284,7 @@ HDR 原图保留源传递函数，没有执行显示色调映射。普通查看�
 当前安装包没有商业代码签名。请从项目 Releases 下载，核对版本化文件名；发布者提供 SHA-256 时可运行：
 
 ```powershell
-Get-FileHash '.\PotPlayerFrameClip-v0.4.0-Setup.exe' -Algorithm SHA256
+Get-FileHash '.\PotPlayerFrameClip-v0.4.1-Setup.exe' -Algorithm SHA256
 ```
 
 ## 卸载
@@ -307,16 +307,16 @@ Get-FileHash '.\PotPlayerFrameClip-v0.4.0-Setup.exe' -Algorithm SHA256
 winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.1
 ```
 
 构建会执行 C# 单元测试、菜单静态检查，以及隔离的安装、重复安装、卸载恢复测试。最终发布资产为：
 
 ```text
-dist\PotPlayerFrameClip-v0.4.0-Setup.exe
+dist\PotPlayerFrameClip-v0.4.1-Setup.exe
 ```
 
-`dist\release` 与 `dist\obj` 仅供本机构建暂存。GitHub 工作流只为轻量安装包与 SHA-256 文件创建草稿，不自动公开 Full 包；验收后再发布预览版。源码按仓库原目录发布。横幅是静态 PNG，提供明暗两版，不增加程序运行时依赖。
+`dist\release` 与 `dist\obj` 仅供本机构建暂存。GitHub 工作流只为轻量安装包与 SHA-256 文件创建草稿，不自动公开 Full 包；复查验证后单独发布。源码按仓库原目录发布。横幅是静态 PNG，提供明暗两版，不增加程序运行时依赖。
 
 ## 隐私与安全边界
 

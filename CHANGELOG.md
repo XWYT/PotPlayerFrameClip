@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1 - 2026-10-27
+
+- Publish the redesigned interface, background jobs and GPU-preferred processing from 0.4.0 as a stable release.
+- Keep the tray context menu alive across appearance/language refreshes. Refreshing inside a menu callback no longer disposes the popup before WinForms finishes item-click teardown.
+- Add regressions for repeated tray clicks, framework popup teardown and language refresh, plus task actions at 100/150/200% scale.
+- Preserve the 0.4.0 preview tag and assets. Public distribution remains the lightweight installer; Intel/AMD real-device, broader skin, physical mixed-DPI and long-duration coverage remain limited.
+
 ## 0.4.0 Preview - 2026-10-27
 
 ### Interface And Jobs

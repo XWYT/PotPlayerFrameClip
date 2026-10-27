@@ -12,7 +12,7 @@ Collect color, lighting and tonal references for grading, organize shots for cre
 
 Collect lossless stills in multiple formats, preserve original clips or make precise exports for editing, with support for multiple HDR/SDR color spaces.
 
-**Current version: 0.4.0 preview.** [Downloads and release notes](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.0) · [中文](README.md)
+**Current version: 0.4.1 stable.** [Downloads and release notes](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.1) · [中文](README.md)
 
 ## Highlights
 
@@ -25,7 +25,7 @@ Collect lossless stills in multiple formats, preserve original clips or make pre
 
 Output locations, image format, transcoding presets, performance and notification placement are configurable. Accepted jobs keep their submitted source, range and settings.
 
-0.4.0 updates the native interface, task progress, concurrent exports, GPU-preferred processing and menu bridge. See [release notes](docs/releases/v0.4.0.md). Intel/AMD real-device checks, broader skin coverage, mixed-DPI interaction and long-duration acceptance remain open. The public installer is lightweight and does not include FFmpeg.
+0.4.1 ships the redesigned interface, task progress, concurrent exports and GPU-preferred processing as stable, and fixes tray-menu lifetime during appearance refresh. See [release notes](docs/releases/v0.4.1.md). Intel/AMD real-device checks, broader skin coverage, physical mixed-DPI interaction and long-duration coverage remain limited. The public installer is lightweight and does not include FFmpeg.
 
 ## GPU Processing
 
@@ -38,7 +38,7 @@ reference color pipeline remain unchanged. Tasks report the actual backend;
 unsupported formats or insufficient estimated resources use CPU. Short tasks are
 not guaranteed to be faster. See [GPU processing](docs/gpu-processing.md) for
 open-source options, boundaries and local measurements. These features are included
-in the 0.4.0 preview; this is not a claim of universal GPU compatibility.
+in 0.4.1; this is not a claim of universal GPU compatibility.
 
 ## Requirements
 
@@ -50,7 +50,7 @@ The lightweight Setup.exe supports an existing FFmpeg pair or configuration late
 
 The bundled media tools require 64-bit Windows (32-bit PotPlayer on 64-bit Windows is supported). Use compatible external tools on 32-bit Windows. Full is a local development candidate, not a published download: corresponding-source/build-recipe and dependency-license archival remains a public-release gate.
 
-Build preparation: scripts/prepare-ffmpeg.ps1 -Download; then scripts/build.ps1 -Version 0.4.0 -BundleFFmpeg. Downloads are build-time only, pinned by installer/ffmpeg-manifest.json. Silent setup accepts /FFMPEGMODE=existing|bundled|later and /FFMPEGPATH for an existing pair. Lightweight setup rejects bundled mode before replacement.
+Build preparation: scripts/prepare-ffmpeg.ps1 -Download; then scripts/build.ps1 -Version 0.4.1 -BundleFFmpeg. Downloads are build-time only, pinned by installer/ffmpeg-manifest.json. Silent setup accepts /FFMPEGMODE=existing|bundled|later and /FFMPEGPATH for an existing pair. Lightweight setup rejects bundled mode before replacement.
 
 - Windows 10 or Windows 11
 - PotPlayer 32-bit or 64-bit
@@ -70,7 +70,7 @@ winget install --id Gyan.FFmpeg --exact --source winget --accept-package-agreeme
 Copy the complete prompt below and send it to an AI agent that can access the network, local files, and PowerShell:
 
 ```text
-Install the 0.4.0 preview release of PotPlayer FrameClip on this Windows computer. Tell me explicitly that it is a preview.
+Install the 0.4.1 stable release of PotPlayer FrameClip on this Windows computer.
 
 Project URL: https://github.com/XWYT/PotPlayerFrameClip
 
@@ -86,7 +86,7 @@ Close PotPlayer before installing or upgrading. The native menu bridge remains l
 Silent installation:
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.0-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.1-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 ## Color handling
@@ -110,10 +110,10 @@ Dolby Vision sources without a reliable HDR10/HLG-compatible base layer are reje
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.0
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.1
 ```
 
-The release workflow prepares a draft containing the lightweight `PotPlayerFrameClip-v<version>-Setup.exe` and its `.sha256` file. It excludes Full installers. A reviewed preview release is published separately.
+The release workflow prepares a draft containing the lightweight `PotPlayerFrameClip-v<version>-Setup.exe` and its `.sha256` file. It excludes Full installers. Releases are published separately after review and verification.
 
 ## Status and affiliation
 

@@ -133,6 +133,7 @@ namespace PotPlayerFrameClip
                 GpuTests.Contracts(root, source, Check);
                 CancellationAndRecovery(root, source, config);
                 Ipc();
+                PartialOutputActions(root, source, config);
                 Ui(root, source, config);
                 CaptionUi();
                 SaveUi(root);
@@ -250,6 +251,32 @@ namespace PotPlayerFrameClip
                 string result = null;
                 Check(Until(() => ResidentIpc.TrySend("--capture", 150, out result)) && result == "job:test", "resident IPC acknowledgement failed");
                 Check(ResidentIpc.TrySend("--unknown", 500, out result) && result.StartsWith("error:"), "IPC command rejection failed");
+            }
+        }
+        private static void PartialOutputActions(string root, string source, AppConfig config)
+        {
+            using (JobCoordinator jobs = new JobCoordinator(config, delegate { }, Path.Combine(root, "partial-output-ui")))
+            using (ToolTip tips = new ToolTip())
+            using (WorkspaceForm host = new WorkspaceForm(config))
+            using (JobRow row = new JobRow(config, new UiTheme("dark"), jobs, tips))
+            {
+                host.AutoScaleMode = AutoScaleMode.None; host.Content.Controls.Add(row); host.Show(); Realize(host);
+                float previousScale = 1;
+                foreach (float scale in new[] { 1f, 1.5f, 2f })
+                {
+                    host.Scale(new SizeF(scale / previousScale, scale / previousScale)); previousScale = scale;
+                    Check(Math.Abs(UiScale.For(row) - scale) < .03f, "partial-output host scale mismatch");
+                    row.Size = new Size((int)(650 * scale), (int)(124 * scale));
+                    foreach (JobState state in new[] { JobState.Succeeded, JobState.Failed, JobState.Canceled, JobState.Running, JobState.Succeeded })
+                    {
+                        row.UpdateJob(new JobSnapshot { Id = Guid.NewGuid().ToString("N"), Source = source, Title = "Partial output", State = state,
+                            Outputs = new[] { source }, ProcessingBackend = "cpu", Error = state == JobState.Failed ? "Companion output failed" : "" });
+                        row.PerformLayout();
+                        ToolButton[] actions = Children(row).OfType<ToolButton>().Where(b => b.Visible).ToArray();
+                        Check(actions.Length == (state == JobState.Succeeded ? 2 : 3), "partial-output actions missing");
+                        Check(!actions.Any(a => actions.Any(b => a != b && a.Bounds.IntersectsWith(b.Bounds))), "partial-output actions overlap: " + state + " scale=" + scale);
+                    }
+                }
             }
         }
         private static IEnumerable<Control> Children(Control control)
@@ -477,6 +504,27 @@ namespace PotPlayerFrameClip
                     Check(before.Settings.Save(), "hosted settings save failed"); Application.DoEvents();
                     Check(Object.ReferenceEquals(before, centerField.GetValue(desktop)) && !before.IsDisposed && before.Settings.Section == 1, "ordinary save destroyed page and success feedback");
                     before.Settings.ShowSaved(); before.Hide();
+                    NotifyIcon tray = (NotifyIcon)typeof(QuietDesktop).GetField("tray", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(desktop);
+                    ContextMenuStrip menu = tray.ContextMenuStrip;
+                    menu.Items[0].Click += delegate { desktop.RefreshTheme(); };
+                    for (int pass = 0; pass < 3; pass++)
+                    {
+                        config.Theme = pass % 2 == 0 ? "dark" : "light";
+                        config.Language = pass % 2 == 0 ? UiText.English : UiText.Chinese;
+                        menu.Show(new Point(20, 20));
+                        Exception clickFailure = null;
+                        try
+                        {
+                            menu.Items[0].PerformClick();
+                            typeof(ToolStripDropDown).GetMethod("OnItemClicked", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(menu, new object[] { new ToolStripItemClickedEventArgs(menu.Items[0]) });
+                        }
+                        catch (Exception error) { clickFailure = error; }
+                        Application.DoEvents();
+                        Check(clickFailure == null, "tray appearance refresh during click threw: " + clickFailure);
+                        Check(!menu.IsDisposed && Object.ReferenceEquals(menu, tray.ContextMenuStrip), "appearance refresh disposed an active tray menu");
+                        Check(!menu.Visible && menu.Items.Count == 5, "tray menu teardown failed or duplicated actions");
+                        Check(menu.Items[0].Text == UiText.Choose(config.Language, "任务中心", "Task center"), "reused tray menu did not refresh language");
+                    }
                 }
             }
         }

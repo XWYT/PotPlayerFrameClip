@@ -26,7 +26,7 @@ $manifest = Join-Path $journalRoot 'transaction.json'
 $productFiles = @('PotPlayerFrameClip.exe','PotPlayerFrameClip.exe.config','PotPlayerFrameClip.pdb',
     'FrameClipMaintenance.exe','FrameClipBridge64.dll','FrameClipBridge32.dll','FrameClipBridgeHost32.exe',
     'FrameClipMenu.xml','install.ps1','uninstall.ps1','maintenance.ps1','transaction.ps1','ffmpeg.ps1','ffmpeg-manifest.json',
-    'README.md','README.en.md','docs\gpu-processing.md','docs\readme-artwork.md','docs\releases\v0.4.0.md',
+    'README.md','README.en.md','docs\gpu-processing.md','docs\readme-artwork.md','docs\releases\v0.4.0.md','docs\releases\v0.4.1.md',
     'assets\readme\banner-dark.png','assets\readme\banner-light.png','assets\readme\banner-zh-dark.png','assets\readme\banner-zh-light.png',
     'LICENSE','THIRD_PARTY_NOTICES.md','LUCIDE-LICENSE','CHANGELOG.md','unins000.exe','unins000.dat','unins000.msg')
 $dataFiles = @('FrameClip.ini','install-state.json','menu-selection.pending','range.state','library-aliases.tsv','jobs.xml')

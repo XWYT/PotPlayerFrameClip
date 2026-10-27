@@ -40,16 +40,25 @@ namespace PotPlayerFrameClip
         }
         internal void RefreshTheme()
         {
+            if (disposed) return;
             dark = new UiTheme(config.Theme).Dark;
             if (strip != null) strip.Dispose();
             strip = new StatusStripForm(config, OpenTasks, delegate { config.NotificationMode = config.NotificationMode == "pinned" ? "compact" : "pinned"; config.Save(); Refresh(); });
-            ContextMenuStrip previous = tray.ContextMenuStrip;
-            ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Items.Add(T("任务中心", "Task center"), null, delegate { OpenTasks(); });
-            menu.Items.Add(T("设置", "Settings"), null, delegate { engine.OpenSettings(); });
-            menu.Items.Add(T("打开输出目录", "Open output folder"), null, delegate { JobText.Open(config.LibraryRootDirectory, false); });
-            menu.Items.Add(new ToolStripSeparator()); menu.Items.Add(T("退出", "Quit"), null, delegate { engine.Quit(); });
-            tray.ContextMenuStrip = menu; if (previous != null) previous.Dispose();
+            ContextMenuStrip menu = tray.ContextMenuStrip;
+            if (menu == null)
+            {
+                menu = new ContextMenuStrip();
+                menu.Items.Add(String.Empty, null, delegate { OpenTasks(); });
+                menu.Items.Add(String.Empty, null, delegate { engine.OpenSettings(); });
+                menu.Items.Add(String.Empty, null, delegate { JobText.Open(config.LibraryRootDirectory, false); });
+                menu.Items.Add(new ToolStripSeparator()); menu.Items.Add(String.Empty, null, delegate { engine.Quit(); });
+                tray.ContextMenuStrip = menu;
+            }
+            // Item-click teardown still uses this popup after callbacks return.
+            menu.Items[0].Text = T("任务中心", "Task center");
+            menu.Items[1].Text = T("设置", "Settings");
+            menu.Items[2].Text = T("打开输出目录", "Open output folder");
+            menu.Items[4].Text = T("退出", "Quit");
             Refresh();
         }
         private void EnsureCenter()
