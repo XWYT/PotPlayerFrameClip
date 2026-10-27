@@ -13,6 +13,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $install 'PotPlayerFrameClip.exe'),'old-exe')
     New-Item -ItemType Directory -Path (Join-Path $install 'assets\readme'),(Join-Path $install 'docs\releases') -Force | Out-Null
     [IO.File]::WriteAllText((Join-Path $install 'assets\readme\banner-zh-dark.png'),'old-artwork')
+    [IO.File]::WriteAllText((Join-Path $install 'docs\guide.zh.md'),'old-guide')
     [IO.File]::WriteAllLines((Join-Path $data 'FrameClip.ini'),@('Theme=dark','NotificationPosition=custom','NotificationX=0.42'))
     [IO.File]::WriteAllText((Join-Path $data 'jobs.xml'),'<jobs version="1"/>')
     [IO.File]::WriteAllText((Join-Path $data 'user-export.mov'),'export')
@@ -32,6 +33,8 @@ try {
     [IO.File]::WriteAllText((Join-Path $install 'assets\readme\banner-zh-dark.png'),'new-artwork')
     [IO.File]::WriteAllText((Join-Path $install 'docs\releases\v0.4.0.md'),'new-release-notes')
     [IO.File]::WriteAllText((Join-Path $install 'docs\readme-artwork.md'),'new-artwork-documentation')
+    [IO.File]::WriteAllText((Join-Path $install 'docs\guide.zh.md'),'updated-guide')
+    [IO.File]::WriteAllText((Join-Path $install 'docs\guide.en.md'),'new-guide')
     [IO.File]::WriteAllText((Join-Path $install 'FrameClipMaintenance.exe'),'new-file')
     [IO.File]::WriteAllText((Join-Path $data 'FrameClip.ini'),'changed')
     [IO.File]::WriteAllText((Join-Path $player 'PotPlayerMini64.ini'),'changed-menu')
@@ -42,6 +45,8 @@ try {
     Assert ([IO.File]::ReadAllText((Join-Path $install 'assets\readme\banner-zh-dark.png')) -eq 'old-artwork') 'README artwork was not restored.'
     Assert (-not (Test-Path -LiteralPath (Join-Path $install 'docs\releases\v0.4.0.md'))) 'New release documentation was not rolled back.'
     Assert (-not (Test-Path -LiteralPath (Join-Path $install 'docs\readme-artwork.md'))) 'New artwork documentation was not rolled back.'
+    Assert ([IO.File]::ReadAllText((Join-Path $install 'docs\guide.zh.md')) -eq 'old-guide') 'Previous guide was not restored.'
+    Assert (-not (Test-Path -LiteralPath (Join-Path $install 'docs\guide.en.md'))) 'New translated guide was not rolled back.'
     Assert ([IO.File]::ReadAllText((Join-Path $private 'ffmpeg.exe')) -eq 'previous-private-ffmpeg') 'Previous private FFmpeg not restored.'
     Assert (-not (Test-Path -LiteralPath (Join-Path $private 'ffprobe.exe'))) 'New private FFprobe not rolled back.'
     Assert ([IO.File]::ReadAllText((Join-Path $data 'FrameClip.ini')) -eq $config) 'Settings not restored exactly.'

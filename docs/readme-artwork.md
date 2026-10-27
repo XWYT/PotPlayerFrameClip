@@ -1,11 +1,20 @@
 # README Artwork
 
-FrameClip collects film/TV stills and clips for professional references and
-personal collections. Banners describe output capabilities, not configurable
-queue sizes or implementation details. Do not describe ProRes/DNxHR transcoding
-as lossless source copying or imply all HDR formats are supported.
-Lead with multiple HDR/SDR color spaces, not lists of transfer functions,
-primaries, bit depths or codec profiles. Keep those details in technical sections.
+FrameClip collects film/TV stills and clips for personal collections and
+professional reference. Lead with the reader's goal: keep favorite shots and
+gather material for creative work. Support that promise in this order:
+lossless stills and source-copy clips; automatic folders from video names;
+output formats, editing codecs and multiple HDR/SDR color spaces.
+Use plain user-facing benefits, not configurable queue counts or engineering
+history. Name-based classification is preliminary filing, not scene analysis or
+online cataloging. Do not describe ProRes/DNxHR transcoding as lossless copying
+or imply universal HDR support. Transfer functions, bit depths and codec profiles
+belong in format tables and the bilingual user guides, not the banner.
+
+READMEs contain the purpose, key capabilities, installation and everyday use.
+Keep detailed color/import limits, maintenance commands and troubleshooting in
+guide.zh.md / guide.en.md. Remove duplicate explanations and development
+narration; retain the limits that affect the user's output or installation.
 
 The artwork uses the native interface's graphite/green palette, a semibold
 wordmark and a softened dot-matrix treatment sampled from the actual Clip glyphs.

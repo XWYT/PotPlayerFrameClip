@@ -18,7 +18,8 @@ def render(font_path, display_path, cjk_path, output, theme, language):
     value_font = ImageFont.truetype(str(display_path), 29 * scale)
     label_font = ImageFont.truetype(str(font_path), 20 * scale)
     zh = language == "zh"
-    chinese_font = ImageFont.truetype(str(cjk_path), 30 * scale) if zh else None
+    chinese_font = ImageFont.truetype(str(cjk_path), 28 * scale) if zh else None
+    chinese_heading = ImageFont.truetype(str(cjk_path), 37 * scale) if zh else None
     chinese_body = ImageFont.truetype(str(cjk_path), 23 * scale) if zh else None
     chinese_label = ImageFont.truetype(str(cjk_path), 20 * scale) if zh else None
     mask = Image.new("L", image.size)
@@ -39,26 +40,31 @@ def render(font_path, display_path, cjk_path, output, theme, language):
             draw.ellipse((x*scale-r, y*scale-r, x*scale+r, y*scale+r), fill=accent + (coverage,))
     image = Image.alpha_composite(image, dots.filter(ImageFilter.GaussianBlur(.48 * scale)))
     draw = ImageDraw.Draw(image)
+    def text(x, y, value, face, color, available):
+        bounds = draw.textbbox((x * scale, y * scale), value, font=face, anchor="lt")
+        if draw.textlength(value, font=face) > available * scale or bounds[3] > (height - 24) * scale:
+            raise ValueError("Banner text would clip: " + value)
+        draw.text((x * scale, y * scale), value, font=face, fill=color, anchor="lt")
+
     draw.text((64 * scale, 42 * scale), "PotPlayer", font=label_font, fill=muted, anchor="lt")
     if zh:
-        draw.text((928 * scale, 111 * scale), "影视静帧与片段采集", font=chinese_font, fill=foreground, anchor="lt")
-        draw.text((928 * scale, 167 * scale), "收集创作参照，保存喜爱的画面。", font=chinese_body, fill=muted, anchor="lt")
-        features = ((64, "无损静帧", "多种格式，清晰保存"),
-                    (572, "片段截取", "原码导出，或精确转码"),
-                    (1104, "HDR / SDR 色彩", "支持多种色彩空间"))
+        text(928, 110, "把喜欢的镜头，留下来。", chinese_heading, foreground, 608)
+        text(928, 174, "收藏电影画面，积累创作参照。", chinese_body, muted, 608)
+        features = ((64, "无损静帧与原码片段", "从源文件采集，供收藏与创作"),
+                    (572, "按片名自动归档", "识别视频名称，同部作品集中保存"),
+                    (1104, "多格式 · HDR / SDR", "图片、编辑编码与多种色彩空间"))
     else:
-        draw.text((1018 * scale, 104 * scale), "Stills and clips.", font=value_font, fill=foreground, anchor="lt")
-        draw.text((1018 * scale, 148 * scale), "From films you love.", font=value_font, fill=foreground, anchor="lt")
-        draw.text((1018 * scale, 202 * scale), "For reference and personal collections.", font=label_font, fill=muted, anchor="lt")
-        features = ((64, "Lossless stills", "Multiple output formats"),
-                    (572, "Video clips", "Source copy or precise transcoding"),
-                    (1104, "HDR / SDR color", "Multiple color spaces"))
-    for x, value, label in features:
+        text(1018, 104, "Keep the shots", value_font, foreground, 518)
+        text(1018, 148, "you love.", value_font, foreground, 518)
+        text(1018, 202, "Collect favorites. Gather creative references.", label_font, muted, 518)
+        features = ((64, "Lossless stills. Original clips.", "For your collection and creative work"),
+                    (572, "Filed by film or series", "Automatic folders from video names"),
+                    (1104, "Formats · HDR / SDR", "Image formats, editing codecs, color spaces"))
+    for index, (x, value, label) in enumerate(features):
         face = chinese_font if zh else value_font
-        if draw.textlength(value, font=face) > (width - x - 45) * scale:
-            raise ValueError("Banner heading would clip: " + value)
-        draw.text((x * scale, 300 * scale), value, font=face, fill=foreground, anchor="lt")
-        draw.text((x * scale, 347 * scale), label, font=chinese_label if zh else label_font, fill=muted, anchor="lt")
+        available = (features[index + 1][0] - x - 40) if index + 1 < len(features) else width - x - 64
+        text(x, 300, value, face, foreground, available)
+        text(x, 347, label, chinese_label if zh else label_font, muted, available)
     prefix = "banner-zh-" if zh else "banner-"
     image.convert("RGB").resize((width, height), Image.Resampling.LANCZOS).save(
         output / (prefix + theme + ".png"), optimize=True
