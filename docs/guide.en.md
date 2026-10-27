@@ -6,10 +6,10 @@
 
 Requires Windows 10/11, .NET Framework 4.6.2 or newer, and 32/64-bit PotPlayer, installed or portable. Captures and exports require a matching `ffmpeg.exe` / `ffprobe.exe` pair in the same directory. PotPlayer and .NET Framework are not bundled.
 
-Download the installer and checksum from [Releases](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.1). Verify SHA-256:
+Download the installer and checksum from [Releases](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.2). Verify SHA-256:
 
 ```powershell
-Get-FileHash '.\PotPlayerFrameClip-v0.4.1-Setup.exe' -Algorithm SHA256
+Get-FileHash '.\PotPlayerFrameClip-v0.4.2-Setup.exe' -Algorithm SHA256
 ```
 
 Finish jobs and close both PotPlayer and FrameClip before upgrading. The injected bridge stays loaded for the player's lifetime; replacing it requires a closed player. Windows does not need to restart. Setup backs up files before replacement and rolls back a failed configuration. Existing settings and custom menus are preserved.
@@ -25,7 +25,7 @@ The installer is not commercially code-signed. Check the source, filename and ch
 ### Custom paths and silent setup
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.1-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.2-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 | Argument | Purpose |
@@ -127,10 +127,10 @@ Requires the .NET Framework 4.x C# compiler, Zig and Inno Setup 6. Zig is a buil
 winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.2
 python scripts/check-docs.py
 ```
 
-The build runs C#, native bridge and isolated installation regressions, producing `dist\PotPlayerFrameClip-v0.4.1-Setup.exe` and SHA-256. GitHub prepares a lightweight draft; publication follows review.
+The build runs C#, native bridge and isolated installation regressions, producing `dist\PotPlayerFrameClip-v0.4.2-Setup.exe` and SHA-256. GitHub prepares a lightweight draft; publication follows review.
 
-For a local Full offline candidate, run `scripts/prepare-ffmpeg.ps1 -Download`, then `scripts/build.ps1 -Version 0.4.1 -BundleFFmpeg`. Versions and checksums are pinned in `installer/ffmpeg-manifest.json`. Private tools install under `tools/ffmpeg/<version>/` without changing PATH or external installations. Bundled tools need 64-bit Windows; use compatible external FFmpeg on 32-bit Windows. Full supports `/FFMPEGMODE=bundled`; lightweight setup rejects it. Full is not publicly downloadable until corresponding sources, build recipes and dependency-license archival are complete.
+For a local Full offline candidate, run `scripts/prepare-ffmpeg.ps1 -Download`, then `scripts/build.ps1 -Version 0.4.2 -BundleFFmpeg`. Versions and checksums are pinned in `installer/ffmpeg-manifest.json`. Private tools install under `tools/ffmpeg/<version>/` without changing PATH or external installations. Bundled tools need 64-bit Windows; use compatible external FFmpeg on 32-bit Windows. Full supports `/FFMPEGMODE=bundled`; lightweight setup rejects it. Full is not publicly downloadable until corresponding sources, build recipes and dependency-license archival are complete.

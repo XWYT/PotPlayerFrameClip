@@ -24,7 +24,7 @@ try {
     Run $SetupPath ($arguments + $initialMode + ' /LOG="' + (Join-Path $evidence 'install.log') + '"')
     $installed = $true
     Assert (Test-Path -LiteralPath (Join-Path $app 'FrameClipMaintenance.exe')) 'Maintenance UI not installed.'
-    foreach ($name in @('README.md','README.en.md','docs\guide.zh.md','docs\guide.en.md','docs\gpu-processing.md','docs\readme-artwork.md','docs\releases\v0.4.0.md','docs\releases\v0.4.1.md',
+    foreach ($name in @('README.md','README.en.md','docs\guide.zh.md','docs\guide.en.md','docs\gpu-processing.md','docs\readme-artwork.md','docs\releases\v0.4.0.md','docs\releases\v0.4.1.md','docs\releases\v0.4.2.md',
             'assets\readme\banner-dark.png','assets\readme\banner-light.png','assets\readme\banner-zh-dark.png','assets\readme\banner-zh-light.png')) {
         Assert (Test-Path -LiteralPath (Join-Path $app $name) -PathType Leaf) ("Installed documentation missing: " + $name)
         $source = Join-Path (Split-Path -Parent $PSScriptRoot) $name

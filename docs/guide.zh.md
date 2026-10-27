@@ -6,10 +6,10 @@
 
 支持 Windows 10/11、.NET Framework 4.6.2 或更高版本，以及标准安装、便携版的 32/64 位 PotPlayer。截图和导出需要同目录下配套的 `ffmpeg.exe` 与 `ffprobe.exe`。FrameClip 不捆绑 PotPlayer 或 .NET Framework。
 
-从[项目 Releases](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.1) 下载安装包与校验文件，核对 SHA-256：
+从[项目 Releases](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.2) 下载安装包与校验文件，核对 SHA-256：
 
 ```powershell
-Get-FileHash '.\PotPlayerFrameClip-v0.4.1-Setup.exe' -Algorithm SHA256
+Get-FileHash '.\PotPlayerFrameClip-v0.4.2-Setup.exe' -Algorithm SHA256
 ```
 
 先完成任务并退出 PotPlayer 与 FrameClip，再运行安装包。桥接 DLL 会随播放器保持加载，升级时必须关闭播放器；不需要重启 Windows。安装器先备份再替换，配置失败时回退。已有设置和自定义菜单会保留。
@@ -25,7 +25,7 @@ winget install --id Gyan.FFmpeg --exact --source winget --accept-package-agreeme
 ### 自定义路径与静默安装
 
 ```powershell
-$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.1-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
+$p=Start-Process -FilePath '.\PotPlayerFrameClip-v0.4.2-Setup.exe' -ArgumentList '/VERYSILENT','/NORESTART','/LANG=chinesesimplified','/POTPLAYERDIR="D:\Apps\PotPlayer"','/FFMPEGPATH="D:\Tools\ffmpeg\bin\ffmpeg.exe"' -PassThru; Wait-Process -Id $p.Id
 ```
 
 | 参数 | 作用 |
@@ -127,10 +127,10 @@ ffmpeg -filters | Select-String 'zscale|tonemap'
 winget install --id Microsoft.DotNet.Framework.DeveloperPack_4 --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id JRSoftware.InnoSetup --exact --source winget --accept-package-agreements --accept-source-agreements
 winget install --id zig.zig --exact --source winget --accept-package-agreements --accept-source-agreements
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Version 0.4.2
 python scripts/check-docs.py
 ```
 
-构建会运行 C#、原生桥接和隔离安装回归，生成 `dist\PotPlayerFrameClip-v0.4.1-Setup.exe` 与 SHA-256。GitHub 工作流创建轻量包草稿，复查后再公开发布。
+构建会运行 C#、原生桥接和隔离安装回归，生成 `dist\PotPlayerFrameClip-v0.4.2-Setup.exe` 与 SHA-256。GitHub 工作流创建轻量包草稿，复查后再公开发布。
 
-本地可构建离线 Full 候选：运行 `scripts/prepare-ffmpeg.ps1 -Download`，再运行 `scripts/build.ps1 -Version 0.4.1 -BundleFFmpeg`。下载版本与校验值固定在 `installer/ffmpeg-manifest.json`；工具安装到程序下的 `tools/ffmpeg/<版本>/`，不改 PATH 或外部工具。内置工具需要 64 位 Windows；32 位 Windows 应选择兼容外部 FFmpeg。Full 包支持 `/FFMPEGMODE=bundled`，轻量包会拒绝该选项。Full 包须完成对应源码、构建配方与依赖许可归档后才能公开分发，目前不提供公开下载。
+本地可构建离线 Full 候选：运行 `scripts/prepare-ffmpeg.ps1 -Download`，再运行 `scripts/build.ps1 -Version 0.4.2 -BundleFFmpeg`。下载版本与校验值固定在 `installer/ffmpeg-manifest.json`；工具安装到程序下的 `tools/ffmpeg/<版本>/`，不改 PATH 或外部工具。内置工具需要 64 位 Windows；32 位 Windows 应选择兼容外部 FFmpeg。Full 包支持 `/FFMPEGMODE=bundled`，轻量包会拒绝该选项。Full 包须完成对应源码、构建配方与依赖许可归档后才能公开分发，目前不提供公开下载。

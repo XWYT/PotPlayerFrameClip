@@ -10,7 +10,7 @@
 
 FrameClip 是 PotPlayer 的影视静帧与片段采集工具。从右键菜单保存无损图片、截取原码片段，用来收藏电影画面，或整理调色、剪辑和镜头研究所需的参照。素材按视频名称自动归入对应作品文件夹。
 
-[下载 0.4.1 正式版](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.1) · [English](README.en.md) · [使用指南](docs/guide.zh.md)
+[下载 0.4.2 正式版](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.2) · [English](README.en.md) · [使用指南](docs/guide.zh.md)
 
 ## 主要功能
 
@@ -25,7 +25,7 @@ FrameClip 是 PotPlayer 的影视静帧与片段采集工具。从右键菜单�
 
 需要 Windows 10/11、PotPlayer、.NET Framework 4.6.2 或更高版本，以及配套的 `ffmpeg.exe` 和 `ffprobe.exe`。
 
-1. 下载 [Releases](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.1) 中的 `PotPlayerFrameClip-v0.4.1-Setup.exe` 和同名 `.sha256` 校验文件。
+1. 下载 [Releases](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.2) 中的 `PotPlayerFrameClip-v0.4.2-Setup.exe` 和同名 `.sha256` 校验文件。
 2. 等待任务结束，退出 PotPlayer 和 FrameClip，再运行安装包。便携版播放器可在安装时手动选择目录。
 3. 选择已有的 FFmpeg，或安装后在“设置 > 输出”中配置。
 4. 重新打开 PotPlayer，播放本地视频，右键选择 **参照帧与片段截取**。
@@ -75,7 +75,7 @@ FrameClip/
 
 - [使用指南：安装、设置、色彩处理与问题排查](docs/guide.zh.md)
 - [GPU 处理与兼容性](docs/gpu-processing.md)：NVIDIA 主机已有实际媒体验证，Intel/AMD 实机覆盖仍有限。
-- [版本说明](docs/releases/v0.4.1.md) · [更新记录](CHANGELOG.md)
+- [版本说明](docs/releases/v0.4.2.md) · [更新记录](CHANGELOG.md)
 - [从源码构建](docs/guide.zh.md#从源码构建)
 
 FrameClip 是独立外部扩展，未使用 PotPlayer 官方 SDK，也未获得 PotPlayer 开发者或 Kakao 的背书。源码采用 [MIT License](LICENSE)，第三方许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

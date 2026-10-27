@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2 - 2026-10-27
+
+- Initialize the native menu bridge through a bounded sent-window message so filtered player loops can acknowledge it without retrieving a queued bootstrap message.
+- Reset menu selection state on context opening, including forwarded renderer-child contexts, and handle non-client right-clicks. Stale selections cannot carry over into the next menu session.
+- Add x86/x64 regressions for filtered loops, fresh context opening, cross-thread child sources, border clicks and unrelated-source guards at 100/150/200% scaling.
+- Keep the native menu entry, existing media processing and background resource policy. No new persistent polling, process or runtime dependency.
+
 ## 0.4.1 - 2026-10-27
 
 - Publish the redesigned interface, background jobs and GPU-preferred processing from 0.4.0 as a stable release.

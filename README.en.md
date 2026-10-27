@@ -10,7 +10,7 @@
 
 FrameClip captures film and television stills and clips from PotPlayer's context menu. Save lossless images and source-copy clips for a personal collection, or gather references for color grading, editing and shot studies. Captures are automatically filed by video title.
 
-[Download 0.4.1 stable](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.1) · [中文](README.md) · [User guide](docs/guide.en.md)
+[Download 0.4.2 stable](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.2) · [中文](README.md) · [User guide](docs/guide.en.md)
 
 ## Features
 
@@ -25,7 +25,7 @@ Chinese/English UI, light/dark themes and adjustable multi-monitor notifications
 
 Requires Windows 10/11, PotPlayer, .NET Framework 4.6.2 or newer, and a matching `ffmpeg.exe` / `ffprobe.exe` pair.
 
-1. Download `PotPlayerFrameClip-v0.4.1-Setup.exe` and its `.sha256` file from [Releases](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.1).
+1. Download `PotPlayerFrameClip-v0.4.2-Setup.exe` and its `.sha256` file from [Releases](https://github.com/XWYT/PotPlayerFrameClip/releases/tag/v0.4.2).
 2. Finish current jobs, close PotPlayer and FrameClip, then run the installer. Select your player folder if you use a portable installation.
 3. Choose an existing FFmpeg installation, or configure it later under Settings > Output.
 4. Reopen PotPlayer, play a local video and select **Reference Frame & Clip Capture** from its context menu.
@@ -75,7 +75,7 @@ Lossless refers to image compression and copying encoded streams without re-enco
 
 - [User guide: installation, settings, color and troubleshooting](docs/guide.en.md)
 - [GPU processing and compatibility](docs/gpu-processing.md): real-media checks cover the NVIDIA development host; Intel/AMD real-device coverage remains limited.
-- [Release notes](docs/releases/v0.4.1.md) · [Changelog](CHANGELOG.md)
+- [Release notes](docs/releases/v0.4.2.md) · [Changelog](CHANGELOG.md)
 - [Build from source](docs/guide.en.md#build-from-source)
 
 FrameClip is an independent external extension, not an official PotPlayer SDK plugin. It is not endorsed by Kakao or the PotPlayer developers. Source is licensed under [MIT](LICENSE); see [third-party notices](THIRD_PARTY_NOTICES.md).
