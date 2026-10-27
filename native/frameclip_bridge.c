@@ -224,6 +224,17 @@ static LRESULT CALLBACK FrameClipSubclassProc(
     (void)subclass_id;
     (void)reference_data;
 
+    /* Renderer children can run on another UI thread. The main-thread mouse
+     * hook then never sees their opening click, but PotPlayer forwards the
+     * semantic context-menu message to this window. Reset here too, before
+     * the original procedure opens its native menu; never swallow the message.
+     */
+    if (message == WM_CONTEXTMENU && window == g_main_window &&
+        ((HWND)w_param == window || IsChild(window, (HWND)w_param))) {
+        ResetMenuSession();
+        WriteBridgeLog(L"context-start", 0);
+    }
+
     if (message == WM_COMMAND && g_pending_action >= 0) {
         int action = g_pending_action;
         BOOL current = TickIsCurrent(now, g_pending_until);
@@ -318,7 +329,8 @@ __declspec(dllexport) LRESULT CALLBACK FrameClipMouseProc(int code, WPARAM w_par
     DWORD process_id;
 
     if (code != HC_ACTION || !l_param) return CallNextHookEx(NULL, code, w_param, l_param);
-    if (w_param != WM_RBUTTONDOWN && w_param != WM_LBUTTONDOWN && w_param != WM_MOUSEMOVE)
+    if (w_param != WM_RBUTTONDOWN && w_param != WM_NCRBUTTONDOWN &&
+        w_param != WM_LBUTTONDOWN && w_param != WM_MOUSEMOVE)
         return CallNextHookEx(NULL, code, w_param, l_param);
     mouse = (MOUSEHOOKSTRUCT *)l_param;
     if (!mouse->hwnd || GetWindowThreadProcessId(mouse->hwnd, &process_id) != GetCurrentThreadId() ||
@@ -332,7 +344,7 @@ __declspec(dllexport) LRESULT CALLBACK FrameClipMouseProc(int code, WPARAM w_par
     target_window = GetAncestor(point_window, GA_ROOT);
     if (!target_window) target_window = point_window;
 
-    if (w_param == WM_RBUTTONDOWN) {
+    if (w_param == WM_RBUTTONDOWN || w_param == WM_NCRBUTTONDOWN) {
         root = target_window;
         g_main_window = root;
         EnsureSubclass(g_main_window);

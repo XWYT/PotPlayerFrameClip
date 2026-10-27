@@ -36,9 +36,10 @@ namespace PotPlayerFrameClip
             internal int ActionCount;
             internal int LastAction = -1;
             internal bool Closed;
-            internal TargetWindow(string caption = "FrameClip isolated bridge target", int width = 600, int height = 400)
+            internal TargetWindow(string caption = "FrameClip isolated bridge target", int width = 600, int height = 400, IntPtr parent = default(IntPtr))
             {
-                CreateHandle(new CreateParams { Caption = caption, X = -30000, Y = -30000, Width = width, Height = height, Style = unchecked((int)0x80000000) });
+                CreateHandle(new CreateParams { Caption = caption, X = -30000, Y = -30000, Width = width, Height = height, Parent = parent,
+                    Style = parent == IntPtr.Zero ? unchecked((int)0x80000000) : 0x40000000 });
             }
             protected override void WndProc(ref Message message)
             {
@@ -124,6 +125,66 @@ namespace PotPlayerFrameClip
                 if (receiver.ActionCount != idleBefore + 1 || receiver.LastAction != 6)
                     throw new InvalidOperationException("Open menu expired while user was deciding");
                 Console.WriteLine("Open menu survives10.5 seconds idle");
+                // Context menus may originate on the renderer's own thread or
+                // from non-client/keyboard input, with no main-thread right-down.
+                // The semantic opening message must start a fresh menu session.
+                foreach (int height in new[] { 226, 339, 452 })
+                {
+                    SetWindowPos(menu.Handle, IntPtr.Zero, -30000, -30000, 350, height, 0x14);
+                    InvokeMouse(hook, main, 0x204, 10);
+                    InvokeMouse(hook, root, 0x200, 10); InvokeMouse(hook, menu, 0x200, 10);
+                    InvokeMouse(hook, menu, 0x201, 12 * height / 226);
+                    int before = receiver.ActionCount, about = main.AboutCount;
+                    SendMessage(main.Handle, 0x7B, main.Handle, new IntPtr(-1));
+                    SendMessage(main.Handle, 0x111, new IntPtr(0xE140), IntPtr.Zero); Application.DoEvents();
+                    if (receiver.ActionCount != before || main.AboutCount != about + 1)
+                        throw new InvalidOperationException("Context opening retained old pending action");
+                    InvokeMouse(hook, root, 0x200, 10); InvokeMouse(hook, menu, 0x200, 10);
+                    InvokeMouse(hook, menu, 0x201, 166 * height / 226);
+                    SendMessage(main.Handle, 0x111, new IntPtr(0xE140), IntPtr.Zero); Application.DoEvents();
+                    if (receiver.ActionCount != before + 1 || receiver.LastAction != 6)
+                        throw new InvalidOperationException("Context opening without right-down failed");
+                    // Border messages must clear a previously armed selection too.
+                    InvokeMouse(hook, main, 0xA4, 10);
+                    int borderBefore = receiver.ActionCount;
+                    InvokeMouse(hook, root, 0x200, 10); InvokeMouse(hook, menu, 0x200, 10);
+                    InvokeMouse(hook, menu, 0x201, 190 * height / 226);
+                    SendMessage(main.Handle, 0x111, new IntPtr(0xE140), IntPtr.Zero); Application.DoEvents();
+                    if (receiver.ActionCount != borderBefore + 1 || receiver.LastAction != 7)
+                        throw new InvalidOperationException("Non-client right-down menu action failed");
+                }
+                Console.WriteLine("Fresh context and border opening passed at100/150/200 percent");
+                InvokeMouse(hook, main, 0x204, 10);
+                InvokeMouse(hook, root, 0x200, 10); InvokeMouse(hook, menu, 0x200, 10);
+                InvokeMouse(hook, menu, 0x201, 12 * 452 / 226);
+                Exception rendererFailure = null;
+                IntPtr mainHandle = main.Handle;
+                Thread renderer = new Thread(delegate()
+                {
+                    try
+                    {
+                        using (TargetWindow child = new TargetWindow(parent: mainHandle))
+                            SendMessage(mainHandle, 0x7B, child.Handle, IntPtr.Zero);
+                    }
+                    catch (Exception exception) { rendererFailure = exception; }
+                });
+                renderer.IsBackground = true; renderer.SetApartmentState(ApartmentState.STA); renderer.Start();
+                Stopwatch rendererWait = Stopwatch.StartNew();
+                while (renderer.IsAlive && rendererWait.ElapsedMilliseconds < 5000) { Application.DoEvents(); Thread.Sleep(5); }
+                if (renderer.IsAlive || rendererFailure != null)
+                    throw new InvalidOperationException("Renderer context forwarding failed", rendererFailure);
+                int rendererBefore = receiver.ActionCount, rendererAbout = main.AboutCount;
+                SendMessage(main.Handle, 0x111, new IntPtr(0xE140), IntPtr.Zero); Application.DoEvents();
+                if (receiver.ActionCount != rendererBefore || main.AboutCount != rendererAbout + 1)
+                    throw new InvalidOperationException("Renderer child context retained stale action");
+                InvokeMouse(hook, root, 0x200, 10); InvokeMouse(hook, menu, 0x200, 10);
+                InvokeMouse(hook, menu, 0x201, 166 * 452 / 226);
+                // An unrelated top-level window cannot reset a valid session.
+                SendMessage(main.Handle, 0x7B, receiver.Handle, IntPtr.Zero);
+                SendMessage(main.Handle, 0x111, new IntPtr(0xE140), IntPtr.Zero); Application.DoEvents();
+                if (receiver.ActionCount != rendererBefore + 1 || receiver.LastAction != 6)
+                    throw new InvalidOperationException("Renderer context session or unrelated-source guard failed");
+                Console.WriteLine("Separate renderer thread context and unrelated-source guard passed");
                 Stopwatch idle = Stopwatch.StartNew();
                 for (int i = 0; i < 100000; i++) InvokeMouse(hook, main, 0x202, 10);
                 Console.WriteLine("Ignored100000 mouse events in " + idle.ElapsedMilliseconds + "ms including test marshalling");
